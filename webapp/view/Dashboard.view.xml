@@ -1,0 +1,76 @@
+<mvc:View controllerName="hrrequest.hrm.controller.Dashboard"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns:f="sap.f"
+    xmlns:core="sap.ui.core"
+    xmlns="sap.m">
+    <f:DynamicPage id="dynamicPageId" toggleHeaderOnTitleClick="false">
+        <f:title>
+            <f:DynamicPageTitle>
+                <f:heading>
+                    <Title text="HR Lifecycle Requests"/>
+                </f:heading>
+                <f:actions>
+                    <Button text="Create New Request" type="Emphasized" press=".onCreateRequest"/>
+                </f:actions>
+            </f:DynamicPageTitle>
+        </f:title>
+
+        <f:header>
+            <f:DynamicPageHeader pinnable="true">
+                <HBox wrap="Wrap" fitContainer="true" alignItems="Center" class="sapUiSmallMarginBottom">
+                    <VBox class="sapUiTinyMarginEnd">
+                        <Label text="Search Employee" />
+                        <SearchField id="searchField" width="15rem" placeholder="Name or ID..." search=".onSearch"/>
+                    </VBox>
+                    <VBox class="sapUiTinyMarginEnd">
+                        <Label text="Status" />
+                        <ComboBox id="statusFilter" width="10rem" selectionChange=".onFilterChange">
+                            <core:Item key="" text="All" />
+                            <core:Item key="PENDING" text="Pending" />
+                            <core:Item key="APPROVED" text="Approved" />
+                        </ComboBox>
+                    </VBox>
+                </HBox>
+            </f:DynamicPageHeader>
+        </f:header>
+
+        <f:content>
+            <Table id="requestTable"
+                items="{
+                    path: '/Request',
+                    parameters: {
+                        $count: true
+                    }
+                }"
+                mode="SingleSelectMaster"
+                selectionChange=".onItemSelect"
+                growing="true"
+                growingScrollToLoad="true">
+                <columns>
+                    <Column>
+                        <Text text="Employee" />
+                    </Column>
+                    <Column minScreenWidth="Tablet" demandPopin="true">
+                        <Text text="Department" />
+                    </Column>
+                    <Column minScreenWidth="Desktop" demandPopin="true">
+                        <Text text="Email" />
+                    </Column>
+                    <Column hAlign="End">
+                        <Text text="Status" />
+                    </Column>
+                </columns>
+                <items>
+                    <ColumnListItem type="Navigation">
+                        <cells>
+                            <ObjectIdentifier title="{TargetUser}" text="{FirstName} {LastName}" />
+                            <Text text="{Department}" />
+                            <Text text="{Email}" />
+                            <ObjectStatus text="{StatusText}" state="{= ${StatusCriticality} === 1 ? 'Error' : (${StatusCriticality} === 2 ? 'Warning' : (${StatusCriticality} === 3 ? 'Success' : 'None')) }" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+            </Table>
+        </f:content>
+    </f:DynamicPage>
+</mvc:View>

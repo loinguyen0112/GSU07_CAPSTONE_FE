@@ -1,0 +1,146 @@
+{
+  "_version": "1.48.0",
+  "sap.app": {
+    "id": "hrrequest.hrm",
+    "type": "application",
+    "i18n": "i18n/i18n.properties",
+    "applicationVersion": {
+      "version": "0.0.1"
+    },
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "resources": "resources.json",
+    "sourceTemplate": {
+      "id": "@sap/generator-fiori:basic",
+      "version": "1.23.0",
+      "toolsId": "26263f98-14a1-44f3-8893-0326ceab041e"
+    },
+    "dataSources": {
+      "mainService": {
+        "uri": "/sap/opu/odata4/sap/zui_iam_lifecycle_o4/srvd/sap/zsd_iam_lifecycle/0001/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      }
+    }
+  },
+  "sap.ui": {
+    "technology": "UI5",
+    "icons": {
+      "icon": "",
+      "favIcon": "",
+      "phone": "",
+      "phone@2": "",
+      "tablet": "",
+      "tablet@2": ""
+    },
+    "deviceTypes": {
+      "desktop": true,
+      "tablet": true,
+      "phone": true
+    }
+  },
+  "sap.ui5": {
+    "flexEnabled": true,
+    "dependencies": {
+      "minUI5Version": "1.108.42",
+      "libs": {
+        "sap.m": {},
+        "sap.ui.core": {},
+        "sap.tnt": {},
+        "sap.f": {},
+        "sap.ui.layout": {},
+        "sap.uxap": {}
+      }
+    },
+    "contentDensities": {
+      "compact": true,
+      "cozy": true
+    },
+    "models": {
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": {
+          "bundleName": "hrrequest.hrm.i18n.i18n"
+        }
+      },
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "resources": {
+      "css": [
+        {
+          "uri": "css/style.css"
+        }
+      ]
+    },
+    "routing": {
+      "config": {
+        "routerClass": "sap.f.routing.Router",
+        "viewType": "XML",
+        "async": true,
+        "viewPath": "hrrequest.hrm.view",
+        "controlId": "flexibleColumnLayout",
+        "transition": "slide",
+        "clearControlAggregation": false
+      },
+      "routes": [
+        {
+          "name": "RouteDashboard",
+          "pattern": ":?query:",
+          "target": [
+            "TargetDashboard"
+          ]
+        },
+        {
+          "name": "RouteDetail",
+          "pattern": "detail/{ReqUuid}:?query:",
+          "target": [
+            "TargetDashboard",
+            "TargetDetail"
+          ]
+        },
+        {
+          "name": "RouteWizard",
+          "pattern": "createRequest:?query:",
+          "target": [
+            "TargetWizard"
+          ]
+        }
+      ],
+      "targets": {
+        "TargetDashboard": {
+          "viewName": "Dashboard",
+          "viewId": "Dashboard",
+          "controlAggregation": "beginColumnPages"
+        },
+        "TargetDetail": {
+          "viewName": "RequestDetail",
+          "viewId": "RequestDetail",
+          "controlAggregation": "midColumnPages"
+        },
+        "TargetWizard": {
+          "viewName": "RequestWizard",
+          "viewId": "RequestWizard",
+          "controlAggregation": "beginColumnPages"
+        }
+      }
+    },
+    "rootView": {
+      "viewName": "hrrequest.hrm.view.App",
+      "type": "XML",
+      "async": true,
+      "id": "App"
+    }
+  }
+}

@@ -1,0 +1,77 @@
+<mvc:View controllerName="hrrequest.hrm.controller.RequestWizard"
+    xmlns:mvc="sap.ui.core.mvc" displayBlock="true"
+    xmlns:form="sap.ui.layout.form"
+    xmlns="sap.m">
+    <Page title="Create Request" showNavButton="true" navButtonPress=".onNavBack" enableScrolling="false">
+        <content>
+            <Wizard id="CreateRequestWizard" complete=".onWizardCompleted">
+                <WizardStep id="UserInfoStep" title="User Information" validated="false">
+                    <form:SimpleForm layout="ColumnLayout">
+                        <Label text="Employee ID (Target User)" required="true"/>
+                        <Input id="targetUserInput" value="{TargetUser}" maxLength="12" liveChange=".onUserInfoChange"/>
+                        
+                        <Label text="Email" required="true"/>
+                        <Input id="emailInput" value="{Email}" maxLength="241" liveChange=".onUserInfoChange"/>
+                        
+                        <Label text="First Name"/>
+                        <Input id="firstNameInput" value="{FirstName}" maxLength="40"/>
+                        
+                        <Label text="Last Name"/>
+                        <Input id="lastNameInput" value="{LastName}" maxLength="40"/>
+                        
+                        <Label text="Department"/>
+                        <Input id="departmentInput" value="{Department}" maxLength="40"/>
+                    </form:SimpleForm>
+                </WizardStep>
+
+                <WizardStep id="RoleStep" title="Select Roles">
+                    <Table id="roleTable" items="{
+                        path: '_Roles',
+                        templateShareable: false
+                    }">
+                        <headerToolbar>
+                            <OverflowToolbar>
+                                <Title text="Roles"/>
+                                <ToolbarSpacer/>
+                                <Button text="Add Role" press=".onAddRolePress" type="Emphasized"/>
+                            </OverflowToolbar>
+                        </headerToolbar>
+                        <columns>
+                            <Column>
+                                <Text text="Role Name"/>
+                            </Column>
+                            <Column>
+                                <Text text="Valid From"/>
+                            </Column>
+                            <Column>
+                                <Text text="Valid To"/>
+                            </Column>
+                            <Column width="3rem" hAlign="Center"/>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                    <Input value="{RoleName}" required="true" placeholder="e.g. Z_HR_ADMIN"/>
+                                    <DatePicker value="{ValidFrom}" valueFormat="yyyy-MM-dd" displayFormat="dd/MM/yyyy"/>
+                                    <DatePicker value="{ValidTo}" valueFormat="yyyy-MM-dd" displayFormat="dd/MM/yyyy"/>
+                                    <Button icon="sap-icon://delete" type="Transparent" press=".onDeleteRole"/>
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </WizardStep>
+
+                <WizardStep id="ReviewStep" title="Review">
+                    <Text text="Please review all information before submitting for approval." class="sapUiSmallMarginBottom"/>
+                    <form:SimpleForm layout="ColumnLayout">
+                        <Label text="Employee"/>
+                        <Text text="{TargetUser} - {Email}"/>
+                        <Label text="Department"/>
+                        <Text text="{Department}"/>
+                    </form:SimpleForm>
+                    <Button text="Submit for Approval" type="Accept" press=".onSubmitApproval" class="sapUiMediumMarginTop"/>
+                </WizardStep>
+            </Wizard>
+        </content>
+    </Page>
+</mvc:View>

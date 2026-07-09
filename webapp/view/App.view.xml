@@ -1,0 +1,26 @@
+<mvc:View controllerName="hrrequest.hrm.controller.App"
+    xmlns:mvc="sap.ui.core.mvc" displayBlock="true"
+    xmlns:tnt="sap.tnt"
+    xmlns:f="sap.f"
+    xmlns="sap.m">
+    <tnt:ToolPage id="toolPage">
+        <tnt:header>
+            <tnt:ToolHeader>
+                <Title text="IAM Request Portal" level="H1" class="sapUiTinyMarginBegin"/>
+                <ToolbarSpacer />
+                <Button icon="sap-icon://customer" type="Transparent" />
+            </tnt:ToolHeader>
+        </tnt:header>
+        <tnt:sideContent>
+            <tnt:SideNavigation>
+                <tnt:NavigationList>
+                    <tnt:NavigationListItem text="My Requests" icon="sap-icon://list" select=".onNavToDashboard" />
+                </tnt:NavigationList>
+            </tnt:SideNavigation>
+        </tnt:sideContent>
+        <tnt:mainContents>
+            <f:FlexibleColumnLayout id="flexibleColumnLayout" backgroundDesign="Solid">
+            </f:FlexibleColumnLayout>
+        </tnt:mainContents>
+    </tnt:ToolPage>
+</mvc:View>

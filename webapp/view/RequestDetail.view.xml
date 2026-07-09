@@ -1,0 +1,136 @@
+<mvc:View controllerName="hrrequest.hrm.controller.RequestDetail"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns:uxap="sap.uxap"
+    xmlns:layout="sap.ui.layout"
+    xmlns:form="sap.ui.layout.form"
+    xmlns:core="sap.ui.core"
+    xmlns:m="sap.m">
+    <uxap:ObjectPageLayout id="ObjectPageLayout" showTitleInHeaderContent="true" isChildPage="true">
+        <uxap:headerTitle>
+            <uxap:ObjectPageDynamicHeaderTitle>
+                <uxap:expandedHeading>
+                    <m:Title text="{ReqId}" wrapping="true"/>
+                </uxap:expandedHeading>
+                <uxap:snappedHeading>
+                    <m:Title text="{ReqId}" wrapping="true"/>
+                </uxap:snappedHeading>
+                <uxap:actions>
+                    <m:Button id="btnEdit" text="Edit" type="Emphasized" press=".onEditPress"/>
+                    <m:Button id="btnDelete" text="Delete" type="Transparent" press=".onDeletePress"/>
+                    <m:Button id="btnSubmit" text="Submit" type="Transparent" press=".onSubmitPress"/>
+                    <m:Button id="btnApprove" text="Approve" type="Accept" press=".onApprovePress"/>
+                    <m:Button id="btnReject" text="Reject" type="Reject" press=".onRejectPress"/>
+                    <m:Button icon="sap-icon://decline" type="Transparent" press=".onCloseDetail" tooltip="Close"/>
+                </uxap:actions>
+            </uxap:ObjectPageDynamicHeaderTitle>
+        </uxap:headerTitle>
+        <uxap:headerContent>
+            <m:FlexBox wrap="Wrap" fitContainer="true">
+                <layout:VerticalLayout class="sapUiSmallMarginEnd">
+                    <m:Label text="Status"/>
+                    <m:ObjectStatus id="headerStatus" text="{StatusText}"/>
+                </layout:VerticalLayout>
+                <layout:VerticalLayout class="sapUiSmallMarginEnd">
+                    <m:Label text="Request Type"/>
+                    <m:Text text="{ReqTypeText}"/>
+                </layout:VerticalLayout>
+            </m:FlexBox>
+        </uxap:headerContent>
+
+        <uxap:sections>
+            <uxap:ObjectPageSection title="Person" id="personSection">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection>
+                        <uxap:blocks>
+                            <form:SimpleForm id="personForm" editable="false" layout="ResponsiveGridLayout"
+                                labelSpanXL="3" labelSpanL="4" labelSpanM="12" labelSpanS="12"
+                                columnsXL="2" columnsL="2" columnsM="1">
+                                <m:Label text="Request ID"/>
+                                <m:Text text="{ReqId}"/>
+                                <m:Label text="User"/>
+                                <m:Text text="{TargetUser}"/>
+                                <m:Label text="Title"/>
+                                <m:Text text="{Title}"/>
+                                <m:Label text="First Name"/>
+                                <m:Text text="{FirstName}"/>
+                                <m:Label text="Last Name"/>
+                                <m:Text text="{LastName}"/>
+                                <m:Label text="Status"/>
+                                <m:ObjectStatus id="personStatus" text="{StatusText}"/>
+                                <m:Label text="Risk Score"/>
+                                <m:Text text="{RiskScore}"/>
+                            </form:SimpleForm>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
+            <uxap:ObjectPageSection title="Work Center" id="workCenterSection">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection>
+                        <uxap:blocks>
+                            <form:SimpleForm editable="false" layout="ResponsiveGridLayout"
+                                labelSpanXL="3" labelSpanL="4" labelSpanM="12" labelSpanS="12"
+                                columnsXL="1" columnsL="1" columnsM="1">
+                                <m:Label text="Department"/>
+                                <m:Text text="{Department}"/>
+                            </form:SimpleForm>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
+            <uxap:ObjectPageSection title="Communication" id="communicationSection">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection>
+                        <uxap:blocks>
+                            <form:SimpleForm editable="false" layout="ResponsiveGridLayout"
+                                labelSpanXL="3" labelSpanL="4" labelSpanM="12" labelSpanS="12"
+                                columnsXL="2" columnsL="2" columnsM="1">
+                                <m:Label text="Telephone"/>
+                                <m:Text text="{Telephone}"/>
+                                <m:Label text="Mobile Phone"/>
+                                <m:Text text="{Mobile}"/>
+                                <m:Label text="Fax"/>
+                                <m:Text text="{Fax}"/>
+                                <m:Label text="E-Mail Address"/>
+                                <m:Text text="{Email}"/>
+                            </form:SimpleForm>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
+            <uxap:ObjectPageSection title="Requested Roles" id="rolesSection">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection>
+                        <uxap:blocks>
+                            <m:Table id="rolesTable" items="{_Roles}">
+                                <m:columns>
+                                    <m:Column>
+                                        <m:Text text="Role Name"/>
+                                    </m:Column>
+                                    <m:Column>
+                                        <m:Text text="Valid From"/>
+                                    </m:Column>
+                                    <m:Column>
+                                        <m:Text text="Valid To"/>
+                                    </m:Column>
+                                </m:columns>
+                                <m:items>
+                                    <m:ColumnListItem>
+                                        <m:cells>
+                                            <m:Text text="{RoleName}"/>
+                                            <m:Text text="{ValidFrom}"/>
+                                            <m:Text text="{ValidTo}"/>
+                                        </m:cells>
+                                    </m:ColumnListItem>
+                                </m:items>
+                            </m:Table>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+        </uxap:sections>
+    </uxap:ObjectPageLayout>
+</mvc:View>

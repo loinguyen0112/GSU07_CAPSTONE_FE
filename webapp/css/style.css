@@ -1,0 +1,60 @@
+/* Custom CSS for HR Request App */
+
+.sapTntToolPage {
+    background-color: #f4f6f8;
+}
+
+.sapTntToolHeader {
+    background: linear-gradient(135deg, #0052cc, #003a8c) !important;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.sapTntToolHeader .sapMTitle {
+    color: #ffffff !important;
+    font-weight: 600;
+}
+
+.sapTntToolHeader .sapMBtnIcon {
+    color: #ffffff !important;
+}
+
+.createBtn {
+    background: linear-gradient(to right, #00c6ff, #0072ff) !important;
+    border: none !important;
+    color: white !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 15px rgba(0, 114, 255, 0.4) !important;
+    transition: all 0.3s ease;
+}
+
+.createBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 114, 255, 0.6) !important;
+}
+
+.requestCard {
+    background: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(10px);
+    border-radius: 12px !important;
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    padding: 1rem;
+    transition: transform 0.2s;
+}
+
+.requestCard:hover {
+    transform: scale(1.02);
+}
+
+.sapFGridListItem {
+    border-radius: 12px !important;
+    background: transparent !important;
+    border: none !important;
+}
+
+.sapMWizard {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+    padding: 2rem;
+}

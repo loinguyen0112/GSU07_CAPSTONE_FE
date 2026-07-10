@@ -1,34 +1,41 @@
 <mvc:View controllerName="hrrequest.hrm.controller.RequestWizard"
     xmlns:mvc="sap.ui.core.mvc" displayBlock="true"
     xmlns:form="sap.ui.layout.form"
+    xmlns:core="sap.ui.core"
     xmlns="sap.m">
     <Page title="Create Request" showNavButton="true" navButtonPress=".onNavBack" enableScrolling="false">
         <content>
             <Wizard id="CreateRequestWizard" complete=".onWizardCompleted">
                 <WizardStep id="UserInfoStep" title="User Information" validated="false">
                     <form:SimpleForm layout="ColumnLayout">
+                        <Label text="Request Type" required="true"/>
+                        <Select id="reqTypeSelect" selectedKey="{review>/request/ReqType}" forceSelection="true">
+                            <core:Item key="J" text="Joiner"/>
+                            <core:Item key="M" text="Mover"/>
+                            <core:Item key="L" text="Leaver"/>
+                        </Select>
+                        
                         <Label text="Employee ID (Target User)" required="true"/>
-                        <Input id="targetUserInput" value="{TargetUser}" maxLength="12" liveChange=".onUserInfoChange"/>
+                        <Input id="targetUserInput" value="{review>/request/TargetUser}" maxLength="12" liveChange=".onUserInfoChange"/>
                         
                         <Label text="Email" required="true"/>
-                        <Input id="emailInput" value="{Email}" maxLength="241" liveChange=".onUserInfoChange"/>
+                        <Input id="emailInput" value="{review>/request/Email}" maxLength="241" liveChange=".onUserInfoChange" type="Email"/>
                         
                         <Label text="First Name"/>
-                        <Input id="firstNameInput" value="{FirstName}" maxLength="40"/>
+                        <Input id="firstNameInput" value="{review>/request/FirstName}" maxLength="40"/>
                         
                         <Label text="Last Name"/>
-                        <Input id="lastNameInput" value="{LastName}" maxLength="40"/>
+                        <Input id="lastNameInput" value="{review>/request/LastName}" maxLength="40"/>
                         
                         <Label text="Department"/>
-                        <Input id="departmentInput" value="{Department}" maxLength="40"/>
+                        <Input id="departmentInput" value="{review>/request/Department}" maxLength="40"
+                               showValueHelp="true" valueHelpRequest=".onDepartmentVHRequest"
+                               placeholder="Select department..."/>
                     </form:SimpleForm>
                 </WizardStep>
 
                 <WizardStep id="RoleStep" title="Select Roles">
-                    <Table id="roleTable" items="{
-                        path: '_Roles',
-                        templateShareable: false
-                    }">
+                    <Table id="roleTable" items="{review>/roles}">
                         <headerToolbar>
                             <OverflowToolbar>
                                 <Title text="Roles"/>
@@ -51,9 +58,15 @@
                         <items>
                             <ColumnListItem>
                                 <cells>
-                                    <Input value="{RoleName}" required="true" placeholder="e.g. Z_HR_ADMIN"/>
-                                    <DatePicker value="{ValidFrom}" valueFormat="yyyy-MM-dd" displayFormat="dd/MM/yyyy"/>
-                                    <DatePicker value="{ValidTo}" valueFormat="yyyy-MM-dd" displayFormat="dd/MM/yyyy"/>
+                                    <Input value="{review>RoleName}" required="true" placeholder="Select role..."
+                                           showValueHelp="true" valueHelpRequest=".onRoleVHRequest"
+                                           liveChange=".onRolePreviewChange"/>
+                                    <DatePicker value="{
+                                        path: 'review>ValidFrom'
+                                    }" valueFormat="yyyy-MM-dd" displayFormat="MMM dd, yyyy" change=".onRolePreviewChange"/>
+                                    <DatePicker value="{
+                                        path: 'review>ValidTo'
+                                    }" valueFormat="yyyy-MM-dd" displayFormat="MMM dd, yyyy" change=".onRolePreviewChange"/>
                                     <Button icon="sap-icon://delete" type="Transparent" press=".onDeleteRole"/>
                                 </cells>
                             </ColumnListItem>
@@ -61,15 +74,48 @@
                     </Table>
                 </WizardStep>
 
-                <WizardStep id="ReviewStep" title="Review">
-                    <Text text="Please review all information before submitting for approval." class="sapUiSmallMarginBottom"/>
-                    <form:SimpleForm layout="ColumnLayout">
-                        <Label text="Employee"/>
-                        <Text text="{TargetUser} - {Email}"/>
+                <WizardStep id="ReviewStep" title="Review" activate=".onReviewStepActivate">
+                    <MessageStrip text="Please review all information before submitting for approval." type="Information" showIcon="true" class="sapUiSmallMarginBottom"/>
+                    <form:SimpleForm layout="ColumnLayout" class="sapUiSmallMarginBottom">
+                        <Label text="Request Type"/>
+                        <Text text="{= ${review>/request/ReqType} === 'J' ? 'Joiner' : (${review>/request/ReqType} === 'M' ? 'Mover' : (${review>/request/ReqType} === 'L' ? 'Leaver' : 'Unknown'))}"/>
+                        <Label text="Employee ID"/>
+                        <Text text="{review>/request/TargetUser}"/>
+                        <Label text="Name"/>
+                        <Text text="{review>/request/FirstName} {review>/request/LastName}"/>
+                        <Label text="Email"/>
+                        <Text text="{review>/request/Email}"/>
                         <Label text="Department"/>
-                        <Text text="{Department}"/>
+                        <Text text="{review>/request/Department}"/>
                     </form:SimpleForm>
-                    <Button text="Submit for Approval" type="Accept" press=".onSubmitApproval" class="sapUiMediumMarginTop"/>
+                    <Panel headerText="Assigned Roles" class="sapUiSmallMarginBottom">
+                        <Table items="{review>/roles}" mode="None">
+                            <columns>
+                                <Column>
+                                    <Text text="Role Name"/>
+                                </Column>
+                                <Column>
+                                    <Text text="Valid From"/>
+                                </Column>
+                                <Column>
+                                    <Text text="Valid To"/>
+                                </Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem>
+                                    <cells>
+                                        <Text text="{review>RoleName}"/>
+                                        <Text text="{review>ValidFrom}"/>
+                                        <Text text="{review>ValidTo}"/>
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </Panel>
+                    <HBox class="sapUiMediumMarginTop">
+                        <Button text="Save" type="Transparent" press=".onSaveDraft" icon="sap-icon://save" class="sapUiTinyMarginEnd"/>
+                        <Button text="Submit for Approval" type="Emphasized" press=".onSubmitApproval" icon="sap-icon://paper-plane"/>
+                    </HBox>
                 </WizardStep>
             </Wizard>
         </content>

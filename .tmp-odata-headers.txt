@@ -1,0 +1,14 @@
+HTTP/1.1 200 OK
+X-Powered-By: Express
+set-cookie: sap-usercontext=sap-client=324; path=/
+set-cookie: SAP_SESSIONID_S40_324=ojhlhf1YeXltAzzOm8qy5AoFV8x8QRHxpcOLlfNqTyc%3d; path=/; HttpOnly
+content-type: application/json;odata.metadata=minimal;charset=utf-8
+content-length: 1153
+odata-version: 4.0
+cache-control: no-cache, no-store, must-revalidate
+sap-server: true
+sap-perf-fesrec: 99264.000000
+connection: close
+Vary: Accept-Encoding
+Date: Fri, 10 Jul 2026 09:23:41 GMT
+

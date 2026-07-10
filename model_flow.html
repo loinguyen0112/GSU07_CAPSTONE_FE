@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HR Lifecycle Request — Model Flow</title>
+    <meta name="description" content="Architecture & data flow diagrams for HR Lifecycle Request (SAP UI5 ↔ S/4HANA)">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: #1a2035;
+            --bg-card-hover: #1f2847;
+            --border: #2a3454;
+            --border-glow: #3b5bdb;
+            --text-primary: #e8ecf4;
+            --text-secondary: #8b95b0;
+            --text-muted: #5c6784;
+            --accent-blue: #4c7cf5;
+            --accent-purple: #7c5cfc;
+            --accent-cyan: #22d3ee;
+            --accent-green: #34d399;
+            --accent-orange: #fb923c;
+            --accent-red: #f87171;
+            --accent-pink: #f472b6;
+            --gradient-1: linear-gradient(135deg, #4c7cf5 0%, #7c5cfc 100%);
+            --gradient-2: linear-gradient(135deg, #22d3ee 0%, #4c7cf5 100%);
+            --gradient-3: linear-gradient(135deg, #7c5cfc 0%, #f472b6 100%);
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+            --shadow-md: 0 4px 20px rgba(0,0,0,0.4);
+            --shadow-lg: 0 8px 40px rgba(0,0,0,0.5);
+            --shadow-glow: 0 0 30px rgba(76,124,245,0.15);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --sidebar-width: 300px;
+            --header-height: 70px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html {
+            scroll-behavior: smooth;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) var(--bg-secondary);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent-blue); }
+
+        /* ===== HEADER ===== */
+        .header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: var(--header-height);
+            background: rgba(10, 14, 26, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            padding: 0 32px;
+            transition: box-shadow 0.3s;
+        }
+        .header.scrolled { box-shadow: var(--shadow-md); }
+        .header__logo {
+            display: flex; align-items: center; gap: 14px;
+        }
+        .header__logo-icon {
+            width: 40px; height: 40px;
+            background: var(--gradient-1);
+            border-radius: var(--radius-sm);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; font-weight: 800; color: #fff;
+            box-shadow: 0 0 20px rgba(76,124,245,0.3);
+        }
+        .header__title { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+        .header__subtitle { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+        .header__menu-btn {
+            display: none;
+            background: none; border: none; color: var(--text-primary);
+            font-size: 24px; cursor: pointer; padding: 8px;
+            margin-right: 12px; border-radius: 8px;
+            transition: background 0.2s;
+        }
+        .header__menu-btn:hover { background: var(--bg-card); }
+        .header__badge {
+            margin-left: auto;
+            padding: 5px 14px;
+            background: rgba(76,124,245,0.12);
+            border: 1px solid rgba(76,124,245,0.25);
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--accent-blue);
+            letter-spacing: 0.5px;
+        }
+
+        /* ===== SIDEBAR ===== */
+        .sidebar {
+            position: fixed;
+            top: var(--header-height);
+            left: 0;
+            width: var(--sidebar-width);
+            height: calc(100vh - var(--header-height));
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            padding: 24px 0;
+            z-index: 900;
+            transition: transform 0.3s ease;
+        }
+        .sidebar__section-title {
+            padding: 8px 24px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+        }
+        .sidebar__link {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 24px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            border-left: 3px solid transparent;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .sidebar__link:hover {
+            color: var(--text-primary);
+            background: rgba(76,124,245,0.06);
+            border-left-color: rgba(76,124,245,0.3);
+        }
+        .sidebar__link.active {
+            color: var(--accent-blue);
+            background: rgba(76,124,245,0.1);
+            border-left-color: var(--accent-blue);
+        }
+        .sidebar__link-num {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 22px; height: 22px;
+            border-radius: 6px;
+            font-size: 11px; font-weight: 700;
+            flex-shrink: 0;
+        }
+        .sidebar__link-num.c1 { background: rgba(76,124,245,0.15); color: var(--accent-blue); }
+        .sidebar__link-num.c2 { background: rgba(124,92,252,0.15); color: var(--accent-purple); }
+        .sidebar__link-num.c3 { background: rgba(34,211,238,0.15); color: var(--accent-cyan); }
+        .sidebar__link-num.c4 { background: rgba(52,211,153,0.15); color: var(--accent-green); }
+        .sidebar__link-num.c5 { background: rgba(251,146,60,0.15); color: var(--accent-orange); }
+        .sidebar__link-num.c6 { background: rgba(248,113,113,0.15); color: var(--accent-red); }
+        .sidebar__link-num.c7 { background: rgba(244,114,182,0.15); color: var(--accent-pink); }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 899;
+        }
+
+        /* ===== MAIN CONTENT ===== */
+        .main {
+            margin-left: var(--sidebar-width);
+            margin-top: var(--header-height);
+            padding: 40px 48px 80px;
+            max-width: 1200px;
+        }
+
+        /* ===== HERO ===== */
+        .hero {
+            padding: 48px 0 40px;
+            text-align: center;
+        }
+        .hero__tag {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 18px;
+            background: rgba(76,124,245,0.1);
+            border: 1px solid rgba(76,124,245,0.2);
+            border-radius: 24px;
+            font-size: 12px; font-weight: 600;
+            color: var(--accent-blue);
+            margin-bottom: 20px;
+        }
+        .hero__tag::before { content: "◆"; font-size: 8px; }
+        .hero h1 {
+            font-size: 38px; font-weight: 800;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #e8ecf4 0%, #8b95b0 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+        }
+        .hero p {
+            font-size: 16px; color: var(--text-secondary);
+            max-width: 650px; margin: 0 auto;
+        }
+
+        /* ===== SECTION ===== */
+        .section {
+            margin-bottom: 60px;
+            scroll-margin-top: calc(var(--header-height) + 24px);
+            animation: fadeInUp 0.5s ease both;
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .section__header {
+            display: flex; align-items: center; gap: 16px;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .section__number {
+            display: flex; align-items: center; justify-content: center;
+            width: 36px; height: 36px;
+            border-radius: var(--radius-sm);
+            font-size: 15px; font-weight: 800;
+            color: #fff; flex-shrink: 0;
+        }
+        .section__number.g1 { background: var(--gradient-1); }
+        .section__number.g2 { background: var(--gradient-2); }
+        .section__number.g3 { background: var(--gradient-3); }
+        .section__number.g4 { background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan)); }
+        .section__number.g5 { background: linear-gradient(135deg, var(--accent-orange), var(--accent-red)); }
+        .section__number.g6 { background: linear-gradient(135deg, var(--accent-red), var(--accent-pink)); }
+        .section__number.g7 { background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple)); }
+
+        .section__title {
+            font-size: 22px; font-weight: 700; letter-spacing: -0.5px;
+        }
+
+        /* ===== DIAGRAM CARD ===== */
+        .diagram-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            overflow-x: auto;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .diagram-card:hover {
+            border-color: var(--border-glow);
+            box-shadow: var(--shadow-glow);
+        }
+        .diagram-card .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+        .diagram-card .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== TABLE ===== */
+        .info-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 24px;
+            overflow: hidden;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+        }
+        .info-table thead th {
+            background: var(--bg-card);
+            padding: 14px 20px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+        }
+        .info-table tbody td {
+            padding: 12px 20px;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(42,52,84,0.4);
+            color: var(--text-secondary);
+        }
+        .info-table tbody tr:last-child td { border-bottom: none; }
+        .info-table tbody tr:hover td { background: rgba(76,124,245,0.04); }
+        .info-table code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 5px;
+            background: rgba(76,124,245,0.1);
+            color: var(--accent-blue);
+        }
+
+        /* Status badges */
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .badge--info { background: rgba(76,124,245,0.15); color: var(--accent-blue); }
+        .badge--warn { background: rgba(251,146,60,0.15); color: var(--accent-orange); }
+        .badge--success { background: rgba(52,211,153,0.15); color: var(--accent-green); }
+        .badge--error { background: rgba(248,113,113,0.15); color: var(--accent-red); }
+
+        /* ===== CODE BLOCK (file structure) ===== */
+        .code-block {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px 32px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            line-height: 2;
+            color: var(--text-secondary);
+            overflow-x: auto;
+            white-space: pre;
+        }
+        .code-block .file { color: var(--accent-cyan); }
+        .code-block .dir { color: var(--accent-blue); font-weight: 600; }
+        .code-block .comment { color: var(--text-muted); }
+        .code-block .backend { color: var(--accent-purple); font-weight: 600; }
+        .code-block .type { color: var(--accent-orange); }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 1024px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .sidebar-overlay.open { display: block; }
+            .main { margin-left: 0; padding: 32px 24px 64px; }
+            .header__menu-btn { display: block; }
+        }
+        @media (max-width: 640px) {
+            .main { padding: 20px 16px 48px; }
+            .hero h1 { font-size: 26px; }
+            .diagram-card { padding: 20px 14px; }
+            .section__title { font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header" id="header">
+    <button class="header__menu-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+    <div class="header__logo">
+        <div class="header__logo-icon">HR</div>
+        <div>
+            <div class="header__title">HR Lifecycle Request</div>
+            <div class="header__subtitle">Model Flow — Frontend ↔ Backend</div>
+        </div>
+    </div>
+    <span class="header__badge">SAP UI5 + S/4HANA</span>
+</header>
+
+<!-- SIDEBAR -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+<nav class="sidebar" id="sidebar">
+    <div class="sidebar__section-title">Architecture</div>
+    <a class="sidebar__link" href="#s1"><span class="sidebar__link-num c1">1</span>Tổng quan kiến trúc</a>
+    <a class="sidebar__link" href="#s2"><span class="sidebar__link-num c2">2</span>Routing & Navigation</a>
+
+    <div class="sidebar__section-title" style="margin-top:16px">Data Flows</div>
+    <a class="sidebar__link" href="#s3"><span class="sidebar__link-num c3">3</span>Dashboard — GET Data</a>
+    <a class="sidebar__link" href="#s4"><span class="sidebar__link-num c4">4</span>Request Detail — Actions</a>
+    <a class="sidebar__link" href="#s5"><span class="sidebar__link-num c5">5</span>Request Wizard — Create</a>
+
+    <div class="sidebar__section-title" style="margin-top:16px">Backend Model</div>
+    <a class="sidebar__link" href="#s6"><span class="sidebar__link-num c6">6</span>Entity Model (CDS + DB)</a>
+    <a class="sidebar__link" href="#s7"><span class="sidebar__link-num c7">7</span>Status Lifecycle</a>
+    <a class="sidebar__link" href="#s8"><span class="sidebar__link-num c1">8</span>Draft Pattern (RAP)</a>
+
+    <div class="sidebar__section-title" style="margin-top:16px">Reference</div>
+    <a class="sidebar__link" href="#s9"><span class="sidebar__link-num c2">9</span>Value Help (F4)</a>
+    <a class="sidebar__link" href="#s10"><span class="sidebar__link-num c3">10</span>File Structure</a>
+</nav>
+
+<!-- MAIN CONTENT -->
+<main class="main">
+
+    <!-- HERO -->
+    <div class="hero">
+        <div class="hero__tag">FE_SAP07 — IAM Request Portal</div>
+        <h1>Model Flow Diagrams</h1>
+        <p>Tài liệu trực quan hóa luồng dữ liệu giữa Frontend (SAP UI5) và Backend (SAP S/4HANA Client 324) cho ứng dụng HR Lifecycle Request Management.</p>
+    </div>
+
+    <!-- SECTION 1 -->
+    <section class="section" id="s1">
+        <div class="section__header">
+            <div class="section__number g1">1</div>
+            <h2 class="section__title">Tổng quan kiến trúc (Architecture Overview)</h2>
+        </div>
+        <div class="diagram-card">
+            <div class="mermaid">
+graph TB
+    subgraph FE["🖥️ Frontend — SAP UI5 (FE_SAP07)"]
+        APP["App.view.xml<br/>FlexibleColumnLayout"]
+        DASH["Dashboard.view.xml<br/>Dashboard.controller.ts"]
+        DETAIL["RequestDetail.view.xml<br/>RequestDetail.controller.ts"]
+        WIZARD["RequestWizard.view.xml<br/>RequestWizard.controller.ts"]
+    end
+    subgraph PX["🔀 Proxy Layer"]
+        PROXY["fiori-tools-proxy<br/>(ui5.yaml / ui5-local.yaml)<br/>Path: /sap → s40lp1.ucc.cit.tum.de"]
+    end
+    subgraph BE["⚙️ Backend — SAP S/4HANA (Client 324)"]
+        SRVD["Service Definition<br/>ZSD_IAM_LIFECYCLE"]
+        CDS_HDR["CDS Projection<br/>ZC_IAM_LREQ_HDR<br/>(exposed as Request)"]
+        CDS_ROLE["CDS Projection<br/>ZC_IAM_REQ_ROLE<br/>(exposed as RoleItem)"]
+        BDEF["Behavior Definition<br/>ZI_IAM_LREQ_HDR"]
+        BPC["Behavior Pool Class<br/>ZBP_I_IAM_LREQ_HDR"]
+        DB_HDR["DB Table<br/>ZIAM_LREQ_HDR2"]
+        DB_ROLE["DB Table<br/>ZIAM_REQ_ROLE2"]
+        DRAFT_HDR["Draft Table<br/>ZIAM_LREQ_H_D"]
+        DRAFT_ROLE["Draft Table<br/>ZIAM_REQ_R_D"]
+        VH_DEPT["Value Help<br/>ZI_IAM_DEPT_VH"]
+        VH_ROLE["Value Help<br/>ZI_IAM_ROLE_VH"]
+        VH_STATUS["Value Help<br/>ZI_IAM_STATUS_VH"]
+        VH_REQTYPE["Value Help<br/>ZI_IAM_REQTYPE_VH"]
+    end
+    APP --> DASH
+    APP --> DETAIL
+    APP --> WIZARD
+    DASH -- "OData V4 GET /Request" --> PROXY
+    DASH -- "fetch GET /ZI_IAM_DEPT_VH" --> PROXY
+    DASH -- "fetch GET /ZI_IAM_ROLE_VH" --> PROXY
+    DETAIL -- "OData V4 GET /Request(...)" --> PROXY
+    DETAIL -- "OData V4 Action Calls" --> PROXY
+    WIZARD -- "OData V4 POST /Request" --> PROXY
+    WIZARD -- "OData V4 POST /_Roles" --> PROXY
+    WIZARD -- "fetch GET Value Helps" --> PROXY
+    PROXY --> SRVD
+    SRVD --> CDS_HDR
+    SRVD --> CDS_ROLE
+    CDS_HDR --> BDEF
+    CDS_ROLE --> BDEF
+    BDEF --> BPC
+    BDEF --> DB_HDR
+    BDEF --> DB_ROLE
+    BDEF --> DRAFT_HDR
+    BDEF --> DRAFT_ROLE
+    CDS_HDR -.-> VH_DEPT
+    CDS_HDR -.-> VH_STATUS
+    CDS_HDR -.-> VH_REQTYPE
+    CDS_ROLE -.-> VH_ROLE
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 2 -->
+    <section class="section" id="s2">
+        <div class="section__header">
+            <div class="section__number g2">2</div>
+            <h2 class="section__title">Routing & Navigation Flow</h2>
+        </div>
+        <div class="diagram-card">
+            <div class="mermaid">
+flowchart LR
+    subgraph Routes["Routes (manifest.json)"]
+        R1["RouteDashboard<br/>pattern: :?query:"]
+        R2["RouteDetail<br/>pattern: detail/ReqUuid:?query:"]
+        R3["RouteWizard<br/>pattern: createRequest:?query:"]
+    end
+    subgraph Targets
+        T1["TargetDashboard → Dashboard.view.xml<br/>beginColumnPages"]
+        T2["TargetDetail → RequestDetail.view.xml<br/>midColumnPages"]
+        T3["TargetWizard → RequestWizard.view.xml<br/>beginColumnPages"]
+    end
+    subgraph Layout["Layout (FlexibleColumnLayout)"]
+        L1["OneColumn"]
+        L2["TwoColumnsMidExpanded"]
+    end
+    R1 --> T1 --> L1
+    R2 --> T1
+    R2 --> T2 --> L2
+    R3 --> T3 --> L1
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 3 -->
+    <section class="section" id="s3">
+        <div class="section__header">
+            <div class="section__number g3">3</div>
+            <h2 class="section__title">Dashboard — Data Flow (GET)</h2>
+        </div>
+        <div class="diagram-card">
+            <div class="mermaid">
+sequenceDiagram
+    participant User
+    participant Dashboard as Dashboard<br/>(View + Controller)
+    participant ODataModel as OData V4 Model<br/>(Auto Binding)
+    participant FetchAPI as fetch() API
+    participant Proxy as fiori-tools-proxy
+    participant Backend as SAP Backend<br/>(ZSD_IAM_LIFECYCLE)
+
+    User->>Dashboard: Mở ứng dụng (navigate to RouteDashboard)
+
+    Note over Dashboard, ODataModel: ① Auto Data Binding (Table)
+    Dashboard->>ODataModel: Table binding path='/Request', $count=true
+    ODataModel->>Proxy: GET /sap/opu/odata4/.../Request?$count=true
+    Proxy->>Backend: Forward request
+    Backend-->>Proxy: JSON value array + odata.count
+    Proxy-->>ODataModel: Response
+    ODataModel-->>Dashboard: Populate Table rows
+
+    Note over Dashboard, FetchAPI: ② Manual Fetch (Filter Dropdowns)
+    Dashboard->>FetchAPI: onInit → _loadFilterOptions()
+    FetchAPI->>Proxy: GET .../ZI_IAM_DEPT_VH?$top=200
+    FetchAPI->>Proxy: GET .../ZI_IAM_ROLE_VH?$top=200
+    Proxy->>Backend: Forward requests
+    Backend-->>FetchAPI: Department + Role lists
+    FetchAPI-->>Dashboard: Set JSONModel filters → populate ComboBoxes
+
+    Note over User, Dashboard: ③ User Interaction (Filter/Search)
+    User->>Dashboard: Enter search / select filter
+    Dashboard->>ODataModel: oBinding.filter(aFilters)
+    ODataModel->>Proxy: GET /Request?$filter=...
+    Proxy->>Backend: Forward filtered request
+    Backend-->>Dashboard: Filtered results
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 4 -->
+    <section class="section" id="s4">
+        <div class="section__header">
+            <div class="section__number g4">4</div>
+            <h2 class="section__title">Request Detail — Data Flow (GET + Actions)</h2>
+        </div>
+        <div class="diagram-card">
+            <div class="mermaid">
+sequenceDiagram
+    participant User
+    participant Detail as RequestDetail<br/>(View + Controller)
+    participant ODataModel as OData V4 Model
+    participant Backend as SAP Backend
+
+    Note over User, Detail: ① Navigate to Detail
+    User->>Detail: Click row in Dashboard table
+    Detail->>Detail: onItemSelect → navTo RouteDetail ReqUuid
+
+    Note over Detail, Backend: ② Bind Element (GET single Request)
+    Detail->>ODataModel: bindElement /Request(ReqUuid,IsActiveEntity=true)
+    ODataModel->>Backend: GET /Request(...)? $select=...
+    Backend-->>Detail: Request data + OperationControl flags
+
+    Note over Detail: ③ _updateDetailState()
+    Detail->>Detail: Check Status and OperationControl<br/>Set canEdit, canSubmit, canApprove, canReject
+
+    Note over User, Backend: ④ Edit Flow (Draft Pattern)
+    User->>Detail: Click Edit
+    Detail->>ODataModel: bindContext Edit action
+    ODataModel->>Backend: POST Edit → Create draft copy
+    Backend-->>Detail: Draft entity returned
+    Detail->>Detail: bindRequest IsActiveEntity=false
+
+    User->>Detail: Modify fields → Click Save
+    Detail->>ODataModel: syncDraftFromControls → setProperty
+    Detail->>ODataModel: Prepare → validate
+    Detail->>ODataModel: Activate → save draft as active
+    Backend-->>Detail: Active entity saved
+
+    Note over User, Backend: ⑤ Workflow Actions
+    User->>Detail: Click Submit / Approve / Reject
+    Detail->>ODataModel: bindContext action call
+    ODataModel->>Backend: POST action
+    Backend->>Backend: Update Status 01→02→03/04
+    Backend-->>Detail: Updated entity
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 5 -->
+    <section class="section" id="s5">
+        <div class="section__header">
+            <div class="section__number g5">5</div>
+            <h2 class="section__title">Request Wizard — Create Flow (POST + Draft)</h2>
+        </div>
+        <div class="diagram-card">
+            <div class="mermaid">
+sequenceDiagram
+    participant User
+    participant Wizard as RequestWizard<br/>(View + Controller)
+    participant ReviewModel as JSONModel review
+    participant ODataModel as OData V4 Model
+    participant FetchAPI as fetch() API
+    participant Backend as SAP Backend
+
+    Note over User, Wizard: ① Step 1: User Info
+    User->>Wizard: Fill TargetUser, Email, FirstName, LastName
+    User->>Wizard: Department F4 → onDepartmentVHRequest
+    Wizard->>FetchAPI: fetch ZI_IAM_DEPT_VH
+    FetchAPI->>Backend: GET ZI_IAM_DEPT_VH?$top=200
+    Backend-->>Wizard: Department list → SelectDialog
+
+    Note over User, Wizard: ② Step 2: Roles
+    User->>Wizard: Click Add Role
+    Wizard->>ReviewModel: Push empty role to /roles array
+    User->>Wizard: Role F4 → onRoleVHRequest
+    Wizard->>FetchAPI: fetch ZI_IAM_ROLE_VH
+    FetchAPI->>Backend: GET ZI_IAM_ROLE_VH?$top=200
+    Backend-->>Wizard: Role list → SelectDialog
+
+    Note over User, Wizard: ③ Step 3: Review
+    Wizard->>Wizard: onReviewStepActivate<br/>syncRequestFromForm + syncRolePreviewFromTable
+    Wizard->>ReviewModel: Set /request and /roles data
+
+    Note over User, Backend: ④-A Save Draft Flow
+    User->>Wizard: Click Save Draft
+    Wizard->>ODataModel: ensureDraftContext → bindList /Request create
+    ODataModel->>Backend: POST /Request (create draft)
+    Backend-->>ODataModel: Draft created (ReqUuid assigned)
+    Wizard->>ODataModel: persistRoles → bindList /_Roles create
+    ODataModel->>Backend: POST /_Roles (for each role)
+    Wizard->>ODataModel: Prepare → Activate
+    Backend-->>Wizard: Success → navTo Dashboard
+
+    Note over User, Backend: ④-B Submit for Approval Flow
+    User->>Wizard: Click Submit
+    Wizard->>ODataModel: Create + Roles + Prepare + Activate
+    Wizard->>ODataModel: submitForApproval on active entity
+    ODataModel->>Backend: POST submitForApproval
+    Backend->>Backend: Status 01 → 02 Submitted
+    Backend-->>Wizard: Success → navTo Dashboard
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 6 -->
+    <section class="section" id="s6">
+        <div class="section__header">
+            <div class="section__number g6">6</div>
+            <h2 class="section__title">Backend Entity Model (CDS + Database)</h2>
+        </div>
+        <div class="diagram-card">
+            <div class="mermaid">
+erDiagram
+    ZIAM_LREQ_HDR2 ||--o{ ZIAM_REQ_ROLE2 : "1:N _Roles"
+    ZIAM_LREQ_HDR2 {
+        RAW16 req_uuid PK
+        CHAR10 req_id
+        CHAR1 req_type
+        CHAR12 target_user
+        CHAR40 first_name
+        CHAR40 last_name
+        CHAR40 department
+        CHAR30 title
+        CHAR241 email
+        CHAR30 telephone
+        CHAR30 mobile
+        CHAR30 fax
+        CHAR2 status
+        INT4 risk_score
+        CHAR12 requested_by
+        CHAR12 approved_by
+    }
+    ZIAM_REQ_ROLE2 {
+        RAW16 item_uuid PK
+        RAW16 req_uuid FK
+        CHAR30 role_name
+        DATS valid_from
+        DATS valid_to
+    }
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 7 -->
+    <section class="section" id="s7">
+        <div class="section__header">
+            <div class="section__number g7">7</div>
+            <h2 class="section__title">Status Lifecycle Flow</h2>
+        </div>
+        <div class="diagram-card">
+            <div class="mermaid">
+stateDiagram-v2
+    [*] --> Draft : create (POST /Request)
+    Draft --> Draft : Edit / Save (Prepare + Activate)
+    Draft --> Submitted : submitForApproval action
+    Submitted --> Approved : approve action
+    Submitted --> Rejected : reject action
+    Draft --> Deleted : delete
+            </div>
+        </div>
+
+        <table class="info-table">
+            <thead>
+                <tr>
+                    <th>Status Code</th>
+                    <th>Text</th>
+                    <th>UI Criticality</th>
+                    <th>ObjectStatus State</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>01</code></td>
+                    <td>Draft</td>
+                    <td>Information (0)</td>
+                    <td><span class="badge badge--info">Information</span></td>
+                </tr>
+                <tr>
+                    <td><code>02</code></td>
+                    <td>Submitted</td>
+                    <td>Warning (2)</td>
+                    <td><span class="badge badge--warn">Warning</span></td>
+                </tr>
+                <tr>
+                    <td><code>03</code></td>
+                    <td>Approved</td>
+                    <td>Success (3)</td>
+                    <td><span class="badge badge--success">Success</span></td>
+                </tr>
+                <tr>
+                    <td><code>04</code></td>
+                    <td>Rejected</td>
+                    <td>Error (1)</td>
+                    <td><span class="badge badge--error">Error</span></td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <!-- SECTION 8 -->
+    <section class="section" id="s8">
+        <div class="section__header">
+            <div class="section__number g1">8</div>
+            <h2 class="section__title">Draft Pattern Flow (RAP Managed Draft)</h2>
+        </div>
+        <div class="diagram-card">
+            <div class="mermaid">
+flowchart TD
+    A["User clicks Create / Edit"] --> B["POST create or Edit action<br/>Draft entity created<br/>(IsActiveEntity = false)"]
+    B --> C["User modifies fields<br/>setProperty on draft context"]
+    C --> D{"User action?"}
+    D -->|Save| E["Prepare<br/>Server validations:<br/>validateEmail"]
+    E --> F["Activate<br/>Draft → Active entity<br/>(IsActiveEntity = true)"]
+    F --> G["Success: Status = 01 Draft"]
+    D -->|Submit| E2["Prepare → Activate"]
+    E2 --> H["submitForApproval<br/>on Active entity path"]
+    H --> I["Success: Status = 02 Submitted"]
+    D -->|Cancel| J["Discard<br/>Draft deleted"]
+    J --> K["Return to Active entity view"]
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 9 -->
+    <section class="section" id="s9">
+        <div class="section__header">
+            <div class="section__number g2">9</div>
+            <h2 class="section__title">Value Help (F4) Services</h2>
+        </div>
+        <table class="info-table">
+            <thead>
+                <tr>
+                    <th>Value Help Entity</th>
+                    <th>Used In</th>
+                    <th>Called Via</th>
+                    <th>Fields</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>ZI_IAM_DEPT_VH</code></td>
+                    <td>Dashboard filter, Wizard Department field</td>
+                    <td><code>fetch()</code> API</td>
+                    <td><code>DepartmentID</code>, <code>DepartmentName</code></td>
+                </tr>
+                <tr>
+                    <td><code>ZI_IAM_ROLE_VH</code></td>
+                    <td>Dashboard filter, Wizard Role field</td>
+                    <td><code>fetch()</code> API</td>
+                    <td><code>RoleName</code>, <code>Description</code></td>
+                </tr>
+                <tr>
+                    <td><code>ZI_IAM_STATUS_VH</code></td>
+                    <td>CDS annotation (backend Fiori Elements)</td>
+                    <td>CDS <code>@Consumption.valueHelpDefinition</code></td>
+                    <td><code>Status</code></td>
+                </tr>
+                <tr>
+                    <td><code>ZI_IAM_REQTYPE_VH</code></td>
+                    <td>CDS annotation (backend Fiori Elements)</td>
+                    <td>CDS <code>@Consumption.valueHelpDefinition</code></td>
+                    <td><code>ReqType</code></td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <!-- SECTION 10 -->
+    <section class="section" id="s10">
+        <div class="section__header">
+            <div class="section__number g3">10</div>
+            <h2 class="section__title">File Structure Summary</h2>
+        </div>
+        <div class="code-block"><span class="dir">FE_SAP07/</span>
+├── <span class="dir">webapp/</span>
+│   ├── <span class="dir">controller/</span>
+│   │   ├── <span class="file">App.controller.ts</span>           <span class="comment">← Layout management (FCL)</span>
+│   │   ├── <span class="file">Dashboard.controller.ts</span>     <span class="comment">← List page: GET /Request, filters</span>
+│   │   ├── <span class="file">RequestDetail.controller.ts</span> <span class="comment">← Detail page: Edit/Submit/Approve/Reject</span>
+│   │   └── <span class="file">RequestWizard.controller.ts</span> <span class="comment">← Create page: Draft + Roles + Submit</span>
+│   ├── <span class="dir">view/</span>
+│   │   ├── <span class="file">App.view.xml</span>                <span class="comment">← Root: ToolPage + FlexibleColumnLayout</span>
+│   │   ├── <span class="file">Dashboard.view.xml</span>          <span class="comment">← Table + Filters (DynamicPage)</span>
+│   │   ├── <span class="file">RequestDetail.view.xml</span>      <span class="comment">← Object Page layout</span>
+│   │   └── <span class="file">RequestWizard.view.xml</span>      <span class="comment">← Wizard steps</span>
+│   └── <span class="file">manifest.json</span>                   <span class="comment">← OData V4 model + routing config</span>
+├── <span class="file">ui5.yaml</span>                            <span class="comment">← Proxy: /sap → s40lp1.ucc.cit.tum.de:324</span>
+└── <span class="file">ui5-local.yaml</span>                      <span class="comment">← Local dev config (SAPUI5 1.108.33)</span>
+
+<span class="backend">Backend (SAP S/4HANA - Client 324):</span>
+├── <span class="type">SRVD</span>  <span class="file">ZSD_IAM_LIFECYCLE</span>            <span class="comment">← Service Definition</span>
+├── <span class="type">DDLS</span>  <span class="file">ZC_IAM_LREQ_HDR</span>             <span class="comment">← CDS Projection → exposed as "Request"</span>
+├── <span class="type">DDLS</span>  <span class="file">ZC_IAM_REQ_ROLE</span>             <span class="comment">← CDS Projection → exposed as "RoleItem"</span>
+├── <span class="type">BDEF</span>  <span class="file">ZI_IAM_LREQ_HDR</span>             <span class="comment">← Behavior: CRUD + Draft + Actions</span>
+├── <span class="type">CLAS</span>  <span class="file">ZBP_I_IAM_LREQ_HDR</span>          <span class="comment">← ABAP Implementation Class</span>
+├── <span class="type">TABL</span>  <span class="file">ZIAM_LREQ_HDR2</span>              <span class="comment">← Active DB table (Request header)</span>
+├── <span class="type">TABL</span>  <span class="file">ZIAM_REQ_ROLE2</span>              <span class="comment">← Active DB table (Request roles)</span>
+├── <span class="type">TABL</span>  <span class="file">ZIAM_LREQ_H_D</span>              <span class="comment">← Draft table (Request header)</span>
+└── <span class="type">TABL</span>  <span class="file">ZIAM_REQ_R_D</span>               <span class="comment">← Draft table (Request roles)</span></div>
+    </section>
+
+</main>
+
+<!-- MERMAID JS (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+    // Mermaid config
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'dark',
+        themeVariables: {
+            primaryColor: '#2a3f6f',
+            primaryTextColor: '#e8ecf4',
+            primaryBorderColor: '#3b5bdb',
+            lineColor: '#4c7cf5',
+            secondaryColor: '#1a2035',
+            tertiaryColor: '#111827',
+            noteBkgColor: '#1f2847',
+            noteTextColor: '#e8ecf4',
+            noteBorderColor: '#3b5bdb',
+            actorBkg: '#1a2035',
+            actorTextColor: '#e8ecf4',
+            actorBorder: '#4c7cf5',
+            actorLineColor: '#4c7cf5',
+            signalColor: '#e8ecf4',
+            signalTextColor: '#e8ecf4',
+            labelBoxBkgColor: '#1a2035',
+            labelBoxBorderColor: '#3b5bdb',
+            labelTextColor: '#e8ecf4',
+            loopTextColor: '#8b95b0',
+            activationBorderColor: '#4c7cf5',
+            activationBkgColor: '#2a3f6f',
+            sequenceNumberColor: '#fff',
+            edgeLabelBackground: '#1a2035',
+            clusterBkg: '#111827',
+            clusterBorder: '#2a3454',
+            titleColor: '#e8ecf4',
+            nodeTextColor: '#e8ecf4',
+            mainBkg: '#1a2035'
+        },
+        flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+        sequence: { useMaxWidth: true, showSequenceNumbers: true, actorMargin: 60, mirrorActors: false },
+        er: { useMaxWidth: true },
+        fontFamily: 'Inter, sans-serif',
+        fontSize: 13
+    });
+
+    // Sidebar toggle (mobile)
+    function toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('open');
+        document.getElementById('sidebarOverlay').classList.toggle('open');
+    }
+
+    // Close sidebar on link click (mobile)
+    document.querySelectorAll('.sidebar__link').forEach(link => {
+        link.addEventListener('click', () => {
+            if (window.innerWidth <= 1024) toggleSidebar();
+        });
+    });
+
+    // Header scroll shadow
+    window.addEventListener('scroll', () => {
+        document.getElementById('header').classList.toggle('scrolled', window.scrollY > 10);
+    });
+
+    // Active sidebar link tracking
+    const sections = document.querySelectorAll('.section');
+    const navLinks = document.querySelectorAll('.sidebar__link');
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                navLinks.forEach(link => link.classList.remove('active'));
+                const activeLink = document.querySelector(`.sidebar__link[href="#${entry.target.id}"]`);
+                if (activeLink) activeLink.classList.add('active');
+            }
+        });
+    }, { rootMargin: '-30% 0px -60% 0px' });
+
+    sections.forEach(section => observer.observe(section));
+</script>
+</body>
+</html>

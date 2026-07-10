@@ -26,8 +26,26 @@
                         <Label text="Status" />
                         <ComboBox id="statusFilter" width="10rem" selectionChange=".onFilterChange">
                             <core:Item key="" text="All" />
-                            <core:Item key="PENDING" text="Pending" />
-                            <core:Item key="APPROVED" text="Approved" />
+                            <core:Item key="01" text="Draft" />
+                            <core:Item key="02" text="Submitted" />
+                            <core:Item key="03" text="Approved" />
+                            <core:Item key="04" text="Rejected" />
+                        </ComboBox>
+                    </VBox>
+                    <VBox class="sapUiTinyMarginEnd">
+                        <Label text="Department" />
+                        <ComboBox id="departmentFilter" width="13rem" placeholder="All departments"
+                            selectionChange=".onFilterChange" change=".onFilterChange"
+                            items="{filters>/departments}">
+                            <core:Item key="{filters>DepartmentID}" text="{filters>DepartmentID}" additionalText="{filters>DepartmentName}" />
+                        </ComboBox>
+                    </VBox>
+                    <VBox class="sapUiTinyMarginEnd">
+                        <Label text="Requested Role" />
+                        <ComboBox id="roleFilter" width="16rem" placeholder="All roles"
+                            selectionChange=".onFilterChange" change=".onFilterChange"
+                            items="{filters>/roles}">
+                            <core:Item key="{filters>RoleName}" text="{filters>RoleName}" additionalText="{filters>Description}" />
                         </ComboBox>
                     </VBox>
                 </HBox>
@@ -66,7 +84,7 @@
                             <ObjectIdentifier title="{TargetUser}" text="{FirstName} {LastName}" />
                             <Text text="{Department}" />
                             <Text text="{Email}" />
-                            <ObjectStatus text="{StatusText}" state="{= ${StatusCriticality} === 1 ? 'Error' : (${StatusCriticality} === 2 ? 'Warning' : (${StatusCriticality} === 3 ? 'Success' : 'None')) }" />
+                            <ObjectStatus text="{StatusText}" state="{= ${Status} === '01' ? 'Information' : (${Status} === '02' ? 'Warning' : (${Status} === '03' ? 'Success' : (${Status} === '04' ? 'Error' : 'None'))) }" />
                         </cells>
                     </ColumnListItem>
                 </items>

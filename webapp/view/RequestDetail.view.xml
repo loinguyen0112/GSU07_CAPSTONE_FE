@@ -15,12 +15,17 @@
                     <m:Title text="{ReqId}" wrapping="true"/>
                 </uxap:snappedHeading>
                 <uxap:actions>
-                    <m:Button id="btnEdit" text="Edit" type="Emphasized" press=".onEditPress"/>
-                    <m:Button id="btnDelete" text="Delete" type="Transparent" press=".onDeletePress"/>
-                    <m:Button id="btnSubmit" text="Submit" type="Transparent" press=".onSubmitPress"/>
-                    <m:Button id="btnApprove" text="Approve" type="Accept" press=".onApprovePress"/>
-                    <m:Button id="btnReject" text="Reject" type="Reject" press=".onRejectPress"/>
-                    <m:Button icon="sap-icon://decline" type="Transparent" press=".onCloseDetail" tooltip="Close"/>
+                    <m:Button id="btnEdit" text="Edit" icon="sap-icon://edit" type="Emphasized"
+                        visible="{= ${edit>/canEdit} &amp;&amp; !${edit>/isEditing} }" press=".onEditPress"/>
+                    <m:Button id="btnSaveEdit" text="Save" icon="sap-icon://save" type="Emphasized"
+                        visible="{edit>/isEditing}" press=".onSaveEdit"/>
+                    <m:Button id="btnCancelEdit" text="Cancel" icon="sap-icon://sys-cancel" type="Transparent"
+                        visible="{edit>/isEditing}" press=".onCancelEdit"/>
+                    <m:Button id="btnDelete" text="Delete" icon="sap-icon://delete" type="Reject" visible="{= !${edit>/isEditing} &amp;&amp; ${__EntityControl/Deletable} &amp;&amp; !${HasDraftEntity} }" press=".onDeletePress"/>
+                    <m:Button id="btnSubmit" text="Submit" icon="sap-icon://paper-plane" type="Emphasized" visible="{= !${edit>/isEditing} &amp;&amp; ${edit>/canSubmit} }" press=".onSubmitPress"/>
+                    <m:Button id="btnApprove" text="Approve" icon="sap-icon://accept" type="Accept" visible="{= !${edit>/isEditing} &amp;&amp; ${edit>/canApprove} }" press=".onApprovePress"/>
+                    <m:Button id="btnReject" text="Reject" icon="sap-icon://decline" type="Reject" visible="{= !${edit>/isEditing} &amp;&amp; ${edit>/canReject} }" press=".onRejectPress"/>
+                    <m:Button icon="sap-icon://decline" type="Transparent" visible="{= !${edit>/isEditing} }" press=".onCloseDetail" tooltip="Close"/>
                 </uxap:actions>
             </uxap:ObjectPageDynamicHeaderTitle>
         </uxap:headerTitle>
@@ -32,7 +37,12 @@
                 </layout:VerticalLayout>
                 <layout:VerticalLayout class="sapUiSmallMarginEnd">
                     <m:Label text="Request Type"/>
-                    <m:Text text="{ReqTypeText}"/>
+                    <m:Text text="{ReqTypeText}" visible="{= !${edit>/isEditing} }"/>
+                    <m:Select id="editReqTypeSelect" selectedKey="{ReqType}" visible="{edit>/isEditing}">
+                        <core:Item key="J" text="Joiner"/>
+                        <core:Item key="M" text="Mover"/>
+                        <core:Item key="L" text="Leaver"/>
+                    </m:Select>
                 </layout:VerticalLayout>
             </m:FlexBox>
         </uxap:headerContent>
@@ -42,19 +52,31 @@
                 <uxap:subSections>
                     <uxap:ObjectPageSubSection>
                         <uxap:blocks>
-                            <form:SimpleForm id="personForm" editable="false" layout="ResponsiveGridLayout"
+                            <form:SimpleForm id="personForm" editable="{edit>/isEditing}" layout="ResponsiveGridLayout"
                                 labelSpanXL="3" labelSpanL="4" labelSpanM="12" labelSpanS="12"
                                 columnsXL="2" columnsL="2" columnsM="1">
                                 <m:Label text="Request ID"/>
                                 <m:Text text="{ReqId}"/>
                                 <m:Label text="User"/>
-                                <m:Text text="{TargetUser}"/>
+                                <m:VBox>
+                                    <m:Text text="{TargetUser}" visible="{= !${edit>/isEditing} }"/>
+                                    <m:Input id="editTargetUserInput" value="{TargetUser}" visible="{edit>/isEditing}" maxLength="12"/>
+                                </m:VBox>
                                 <m:Label text="Title"/>
-                                <m:Text text="{Title}"/>
+                                <m:VBox>
+                                    <m:Text text="{Title}" visible="{= !${edit>/isEditing} }"/>
+                                    <m:Input id="editTitleInput" value="{Title}" visible="{edit>/isEditing}" maxLength="15"/>
+                                </m:VBox>
                                 <m:Label text="First Name"/>
-                                <m:Text text="{FirstName}"/>
+                                <m:VBox>
+                                    <m:Text text="{FirstName}" visible="{= !${edit>/isEditing} }"/>
+                                    <m:Input id="editFirstNameInput" value="{FirstName}" visible="{edit>/isEditing}" maxLength="40"/>
+                                </m:VBox>
                                 <m:Label text="Last Name"/>
-                                <m:Text text="{LastName}"/>
+                                <m:VBox>
+                                    <m:Text text="{LastName}" visible="{= !${edit>/isEditing} }"/>
+                                    <m:Input id="editLastNameInput" value="{LastName}" visible="{edit>/isEditing}" maxLength="40"/>
+                                </m:VBox>
                                 <m:Label text="Status"/>
                                 <m:ObjectStatus id="personStatus" text="{StatusText}"/>
                                 <m:Label text="Risk Score"/>
@@ -69,11 +91,14 @@
                 <uxap:subSections>
                     <uxap:ObjectPageSubSection>
                         <uxap:blocks>
-                            <form:SimpleForm editable="false" layout="ResponsiveGridLayout"
+                            <form:SimpleForm editable="{edit>/isEditing}" layout="ResponsiveGridLayout"
                                 labelSpanXL="3" labelSpanL="4" labelSpanM="12" labelSpanS="12"
                                 columnsXL="1" columnsL="1" columnsM="1">
                                 <m:Label text="Department"/>
-                                <m:Text text="{Department}"/>
+                                <m:VBox>
+                                    <m:Text text="{Department}" visible="{= !${edit>/isEditing} }"/>
+                                    <m:Input id="editDepartmentInput" value="{Department}" visible="{edit>/isEditing}" maxLength="40"/>
+                                </m:VBox>
                             </form:SimpleForm>
                         </uxap:blocks>
                     </uxap:ObjectPageSubSection>
@@ -84,17 +109,29 @@
                 <uxap:subSections>
                     <uxap:ObjectPageSubSection>
                         <uxap:blocks>
-                            <form:SimpleForm editable="false" layout="ResponsiveGridLayout"
+                            <form:SimpleForm editable="{edit>/isEditing}" layout="ResponsiveGridLayout"
                                 labelSpanXL="3" labelSpanL="4" labelSpanM="12" labelSpanS="12"
                                 columnsXL="2" columnsL="2" columnsM="1">
                                 <m:Label text="Telephone"/>
-                                <m:Text text="{Telephone}"/>
+                                <m:VBox>
+                                    <m:Text text="{Telephone}" visible="{= !${edit>/isEditing} }"/>
+                                    <m:Input id="editTelephoneInput" value="{Telephone}" visible="{edit>/isEditing}" maxLength="30"/>
+                                </m:VBox>
                                 <m:Label text="Mobile Phone"/>
-                                <m:Text text="{Mobile}"/>
+                                <m:VBox>
+                                    <m:Text text="{Mobile}" visible="{= !${edit>/isEditing} }"/>
+                                    <m:Input id="editMobileInput" value="{Mobile}" visible="{edit>/isEditing}" maxLength="30"/>
+                                </m:VBox>
                                 <m:Label text="Fax"/>
-                                <m:Text text="{Fax}"/>
+                                <m:VBox>
+                                    <m:Text text="{Fax}" visible="{= !${edit>/isEditing} }"/>
+                                    <m:Input id="editFaxInput" value="{Fax}" visible="{edit>/isEditing}" maxLength="30"/>
+                                </m:VBox>
                                 <m:Label text="E-Mail Address"/>
-                                <m:Text text="{Email}"/>
+                                <m:VBox>
+                                    <m:Text text="{Email}" visible="{= !${edit>/isEditing} }"/>
+                                    <m:Input id="editEmailInput" value="{Email}" visible="{edit>/isEditing}" type="Email" maxLength="241"/>
+                                </m:VBox>
                             </form:SimpleForm>
                         </uxap:blocks>
                     </uxap:ObjectPageSubSection>
@@ -116,13 +153,24 @@
                                     <m:Column>
                                         <m:Text text="Valid To"/>
                                     </m:Column>
+                                    <m:Column width="3rem" visible="{edit>/isEditing}"/>
                                 </m:columns>
                                 <m:items>
                                     <m:ColumnListItem>
                                         <m:cells>
-                                            <m:Text text="{RoleName}"/>
-                                            <m:Text text="{ValidFrom}"/>
-                                            <m:Text text="{ValidTo}"/>
+                                            <m:VBox>
+                                                <m:Text text="{RoleName}" visible="{= !${edit>/isEditing} }"/>
+                                                <m:Input value="{RoleName}" visible="{edit>/isEditing}" maxLength="30"/>
+                                            </m:VBox>
+                                            <m:VBox>
+                                                <m:Text text="{ValidFrom}" visible="{= !${edit>/isEditing} }"/>
+                                                <m:DatePicker value="{ValidFrom}" valueFormat="yyyy-MM-dd" displayFormat="MMM dd, yyyy" visible="{edit>/isEditing}"/>
+                                            </m:VBox>
+                                            <m:VBox>
+                                                <m:Text text="{ValidTo}" visible="{= !${edit>/isEditing} }"/>
+                                                <m:DatePicker value="{ValidTo}" valueFormat="yyyy-MM-dd" displayFormat="MMM dd, yyyy" visible="{edit>/isEditing}"/>
+                                            </m:VBox>
+                                            <m:Button icon="sap-icon://delete" type="Transparent" visible="{edit>/isEditing}" press=".onDeleteRolePress"/>
                                         </m:cells>
                                     </m:ColumnListItem>
                                 </m:items>

@@ -9,6 +9,9 @@ import ObjectStatus from "sap/m/ObjectStatus";
 import JSONModel from "sap/ui/model/json/JSONModel";
 import BusyIndicator from "sap/ui/core/BusyIndicator";
 import DateFormat from "sap/ui/core/format/DateFormat";
+import Dialog from "sap/m/Dialog";
+import TextArea from "sap/m/TextArea";
+import Button from "sap/m/Button";
 
 /**
  * @namespace hrrequest.hrm.controller
@@ -25,6 +28,13 @@ export default class RequestDetail extends Controller {
             canApprove: false,
             canReject: false
         }), "edit");
+        this.getView()?.setModel(new JSONModel({
+            approvalReason: "",
+            sodConflicts: [],
+            isLoading: false,
+            sodChecked: false,
+            sodLoading: false
+        }), "detail");
         const oRouter = (this.getOwnerComponent() as UIComponent).getRouter() as Router;
         oRouter.getRoute("RouteDetail")?.attachPatternMatched(this._onRouteMatched, this);
     }
@@ -32,6 +42,10 @@ export default class RequestDetail extends Controller {
     private _onRouteMatched(oEvent: Event): void {
         const oArgs = oEvent.getParameter("arguments") as any;
         this._sReqUuid = oArgs.ReqUuid;
+        const oDetailModel = this.getView()?.getModel("detail") as JSONModel;
+        oDetailModel?.setProperty("/approvalReason", "");
+        oDetailModel?.setProperty("/sodConflicts", []);
+        oDetailModel?.setProperty("/sodChecked", false);
         this._setEditing(false);
         this._setCanEdit(false);
         this._setActionAvailability(false, false, false);
@@ -44,13 +58,16 @@ export default class RequestDetail extends Controller {
             oView.bindElement({
                 path: `/Request(ReqUuid=${this._sReqUuid},IsActiveEntity=${bIsActiveEntity})`,
                 parameters: {
-                    $select: "ReqUuid,ReqId,ReqType,ReqTypeText,TargetUser,Title,FirstName,LastName,Department,Telephone,Mobile,Fax,Email,Status,StatusText,StatusCriticality,RiskScore,HasDraftEntity,HasActiveEntity,IsActiveEntity,__OperationControl,__EntityControl",
+                    $select: "ReqUuid,ReqId,ReqType,ReqTypeText,TargetUser,Title,FirstName,LastName,Department,Telephone,Mobile,Fax,Email,Status,StatusText,StatusCriticality,RiskScore,TicketId,Reason,DurationHours,FfGrantStatus,FfStartAt,FfEndAt,HasDraftEntity,HasActiveEntity,IsActiveEntity,__OperationControl,__EntityControl",
                     $$ownRequest: true
                 },
                 events: {
+                    dataRequested: () => {
+                        (this.getView()?.getModel("detail") as JSONModel)?.setProperty("/isLoading", true);
+                    },
                     dataReceived: () => {
-                        // Use setTimeout to ensure context data is available
-                        setTimeout(() => this._updateDetailState(), 100);
+                        (this.getView()?.getModel("detail") as JSONModel)?.setProperty("/isLoading", false);
+                        void this._updateDetailState();
                     }
                 }
             });
@@ -217,7 +234,10 @@ export default class RequestDetail extends Controller {
             Telephone: (this.byId("editTelephoneInput") as any)?.getValue?.() || "",
             Mobile: (this.byId("editMobileInput") as any)?.getValue?.() || "",
             Fax: (this.byId("editFaxInput") as any)?.getValue?.() || "",
-            Email: (this.byId("editEmailInput") as any)?.getValue?.() || ""
+            Email: (this.byId("editEmailInput") as any)?.getValue?.() || "",
+            TicketId: (this.byId("editTicketIdInput") as any)?.getValue?.() || "",
+            Reason: (this.byId("editReasonInput") as any)?.getValue?.() || "",
+            DurationHours: (this.byId("editDurationHoursInput") as any)?.getValue?.() || ""
         };
 
         await Promise.all(Object.entries(mHeaderFields).map(([sProperty, sValue]) =>
@@ -273,16 +293,40 @@ export default class RequestDetail extends Controller {
         }).catch((err: Error) => MessageToast.show("Submit Error: " + err.message));
     }
 
-    public onApprovePress(): void {
+    public async onApprovePress(): Promise<void> {
         const oContext = this.getView()?.getBindingContext() as Context;
         if (!oContext) return;
 
-        const oAction = oContext.getModel().bindContext(`${this.ACTION_NAMESPACE}.approve(...)`, oContext) as any;
-        oAction.execute().then(() => {
+        let sApprovalReason = "";
+        try {
+            const iRiskScore = Number(await this._requestProperty(oContext, "RiskScore"));
+            sApprovalReason = iRiskScore >= 3 ? (await this._requestApprovalReason() || "") : "";
+            if (iRiskScore >= 3 && !sApprovalReason) {
+                return;
+            }
+            await this._executeApprove(oContext, sApprovalReason);
             MessageToast.show("Approved successfully!");
             oContext.refresh();
             setTimeout(() => this._updateDetailState(), 500);
-        }).catch((err: Error) => MessageToast.show("Approve Error: " + err.message));
+        } catch (err: any) {
+            const sMessage = String(err.message || "Unknown error");
+            if (!sApprovalReason && sMessage.toLowerCase().includes("rationale")) {
+                const sRetryReason = await this._requestApprovalReason();
+                if (sRetryReason) {
+                    try {
+                        await this._executeApprove(oContext, sRetryReason);
+                        MessageToast.show("Approved successfully!");
+                        oContext.refresh();
+                        setTimeout(() => this._updateDetailState(), 500);
+                        return;
+                    } catch (oRetryError: any) {
+                        this._showApproveError(oRetryError);
+                        return;
+                    }
+                }
+            }
+            this._showApproveError(err);
+        }
     }
 
     public onRejectPress(): void {
@@ -300,5 +344,141 @@ export default class RequestDetail extends Controller {
     public onCloseDetail(): void {
         const oRouter = (this.getOwnerComponent() as UIComponent).getRouter() as Router;
         oRouter.navTo("RouteDashboard");
+    }
+
+    public async onShowApprovalRationale(): Promise<void> {
+        const oContext = this.getView()?.getBindingContext() as Context;
+        if (!oContext) return;
+        try {
+            const oAction = oContext.getModel().bindContext(`${this.ACTION_NAMESPACE}.getApprovalRationale(...)`, oContext) as any;
+            await oAction.execute();
+            const oResult = await oAction.getBoundContext?.()?.requestObject?.();
+            const sApprovalReason = String(oResult?.ApprovalReason || oResult?.value?.ApprovalReason || "");
+            if (!sApprovalReason) {
+                MessageToast.show("No approval rationale is available.");
+                return;
+            }
+            (this.getView()?.getModel("detail") as JSONModel)?.setProperty("/approvalReason", sApprovalReason);
+        } catch (err: any) {
+            MessageBox.error("Approval rationale is restricted to the approver or a Basis administrator.");
+        }
+    }
+
+    public async onCheckSodPress(): Promise<void> {
+        const oDetailModel = this.getView()?.getModel("detail") as JSONModel;
+        oDetailModel?.setProperty("/sodLoading", true);
+        try {
+            await this._loadSodResult();
+        } finally {
+            oDetailModel?.setProperty("/sodLoading", false);
+        }
+    }
+
+    private async _loadSodResult(): Promise<void> {
+        const oContext = this.getView()?.getBindingContext() as Context;
+        if (!oContext) return;
+        try {
+            const oAction = oContext.getModel().bindContext(`${this.ACTION_NAMESPACE}.checkSod(...)`, oContext) as any;
+            await oAction.execute();
+            const oResult = await oAction.getBoundContext?.()?.requestObject?.();
+            const aConflicts = oResult?.value || oResult?.Conflicts || [];
+            (this.getView()?.getModel("detail") as JSONModel)?.setProperty("/sodConflicts", aConflicts);
+        } catch {
+            (this.getView()?.getModel("detail") as JSONModel)?.setProperty("/sodConflicts", []);
+        } finally {
+            (this.getView()?.getModel("detail") as JSONModel)?.setProperty("/sodChecked", true);
+        }
+    }
+
+    private _requestApprovalReason(): Promise<string | null> {
+        return new Promise((resolve) => {
+            const oReasonInput = new TextArea({
+                width: "100%",
+                rows: 5,
+                maxLength: 255,
+                placeholder: "Explain why the Critical SoD conflict is approved. This rationale is audit logged."
+            });
+            const oDialog = new Dialog({
+                title: "Critical SoD approval rationale",
+                contentWidth: "32rem",
+                content: [oReasonInput],
+                beginButton: new Button({
+                    text: "Approve",
+                    type: "Accept",
+                    press: () => {
+                        const sReason = oReasonInput.getValue().trim();
+                        if (!sReason) {
+                            oReasonInput.setValueState("Error");
+                            oReasonInput.setValueStateText("Approval rationale is required for Critical SoD.");
+                            return;
+                        }
+                        oDialog.close();
+                        resolve(sReason);
+                    }
+                }),
+                endButton: new Button({
+                    text: "Cancel",
+                    press: () => {
+                        oDialog.close();
+                        resolve(null);
+                    }
+                }),
+                afterClose: () => oDialog.destroy()
+            });
+            this.getView()?.addDependent(oDialog);
+            oDialog.open();
+        });
+    }
+
+    private async _executeApprove(oContext: Context, sApprovalReason: string): Promise<void> {
+        const oAction = oContext.getModel().bindContext(`${this.ACTION_NAMESPACE}.approve(...)`, oContext) as any;
+        // The OData action parameter is non-nullable in the service metadata.
+        // Always send it; the RAP handler enforces non-empty rationale only for Critical SoD.
+        oAction.setParameter("ApprovalReason", sApprovalReason || "");
+        await oAction.execute();
+    }
+
+    /**
+     * Uses the standard Fiori MessageBox details pattern.  The business summary
+     * remains readable while the full OData/RAP message stays available through
+     * the built-in "Show Details" link instead of being clipped in one line.
+     */
+    private _showApproveError(oError: unknown): void {
+        const sDetails = this._getODataErrorMessage(oError);
+        const bGrantInProgress = /firefighter grant.*(?:already|process)|grant.*already.*(?:pending|granting|active)/i.test(sDetails);
+        const sSummary = bGrantInProgress
+            ? "A Firefighter grant is already queued or being processed for this request."
+            : "The approval could not be completed. Review the details and correct the request if needed.";
+
+        MessageBox.error(sSummary, {
+            title: "Approval Failed",
+            details: sDetails
+        });
+    }
+
+    private _getODataErrorMessage(oError: any): string {
+        const aResponseTexts = [
+            oError?.cause?.responseText,
+            oError?.responseText,
+            oError?.cause?.error?.responseText
+        ];
+        for (const sResponseText of aResponseTexts) {
+            if (typeof sResponseText !== "string" || !sResponseText) {
+                continue;
+            }
+            try {
+                const oPayload = JSON.parse(sResponseText);
+                const vMessage = oPayload?.error?.message?.value || oPayload?.error?.message;
+                if (typeof vMessage === "string" && vMessage) {
+                    return vMessage;
+                }
+            } catch (_parseError) {
+                // Try the next OData error representation.
+            }
+        }
+        const vMessage = oError?.error?.message || oError?.message;
+        return typeof vMessage === "string" && vMessage
+            ? vMessage
+            : "No technical message was returned by the service.";
     }
 }

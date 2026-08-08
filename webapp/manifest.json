@@ -73,7 +73,12 @@
           "synchronizationMode": "None",
           "operationMode": "Server",
           "autoExpandSelect": true,
-          "earlyRequests": true
+          "earlyRequests": true,
+          "groupProperties": {
+            "iamChanges": {
+              "submit": "API"
+            }
+          }
         }
       }
     },

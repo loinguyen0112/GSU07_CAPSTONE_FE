@@ -5,14 +5,15 @@
     xmlns:form="sap.ui.layout.form"
     xmlns:core="sap.ui.core"
     xmlns:m="sap.m">
-    <uxap:ObjectPageLayout id="ObjectPageLayout" showTitleInHeaderContent="true" isChildPage="true">
+    <uxap:ObjectPageLayout id="ObjectPageLayout" showTitleInHeaderContent="true" alwaysShowContentHeader="true"
+        isChildPage="true" busy="{detail>/isLoading}" busyIndicatorDelay="0">
         <uxap:headerTitle>
             <uxap:ObjectPageDynamicHeaderTitle>
                 <uxap:expandedHeading>
-                    <m:Title text="{ReqId}" wrapping="true"/>
+                    <m:Title text="{= ${ReqId} + ' - ' + ${TargetUser} }" wrapping="true"/>
                 </uxap:expandedHeading>
                 <uxap:snappedHeading>
-                    <m:Title text="{ReqId}" wrapping="true"/>
+                    <m:Title text="{= ${ReqId} + ' - ' + ${TargetUser} }" wrapping="true"/>
                 </uxap:snappedHeading>
                 <uxap:actions>
                     <m:Button id="btnEdit" text="Edit" icon="sap-icon://edit" type="Emphasized"
@@ -32,16 +33,21 @@
         <uxap:headerContent>
             <m:FlexBox wrap="Wrap" fitContainer="true">
                 <layout:VerticalLayout class="sapUiSmallMarginEnd">
+                    <m:Label text="Requested for"/>
+                    <m:Text text="{TargetUser} - {FirstName} {LastName}"/>
+                </layout:VerticalLayout>
+                <layout:VerticalLayout class="sapUiSmallMarginEnd">
                     <m:Label text="Status"/>
                     <m:ObjectStatus id="headerStatus" text="{StatusText}"/>
                 </layout:VerticalLayout>
                 <layout:VerticalLayout class="sapUiSmallMarginEnd">
                     <m:Label text="Request Type"/>
                     <m:Text text="{ReqTypeText}" visible="{= !${edit>/isEditing} }"/>
-                    <m:Select id="editReqTypeSelect" selectedKey="{ReqType}" visible="{edit>/isEditing}">
+                    <m:Select id="editReqTypeSelect" selectedKey="{path: 'ReqType', mode: 'OneWay'}" visible="{edit>/isEditing}">
                         <core:Item key="J" text="Joiner"/>
                         <core:Item key="M" text="Mover"/>
                         <core:Item key="L" text="Leaver"/>
+                        <core:Item key="F" text="Firefighter Access"/>
                     </m:Select>
                 </layout:VerticalLayout>
             </m:FlexBox>
@@ -138,6 +144,38 @@
                 </uxap:subSections>
             </uxap:ObjectPageSection>
 
+            <uxap:ObjectPageSection title="Firefighter Access" id="firefighterSection" visible="{= %{ReqType} === 'F' }">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection>
+                        <uxap:blocks>
+                            <form:SimpleForm editable="{edit>/isEditing}" layout="ResponsiveGridLayout"
+                                labelSpanXL="3" labelSpanL="4" labelSpanM="12" labelSpanS="12"
+                                columnsXL="2" columnsL="2" columnsM="1">
+                                <m:Label text="Emergency Ticket ID"/>
+                                <m:VBox>
+                                    <m:Text text="{TicketId}" visible="{= !${edit>/isEditing} }"/>
+                                    <m:Input id="editTicketIdInput" value="{TicketId}" visible="{edit>/isEditing}" maxLength="40"/>
+                                </m:VBox>
+                                <m:Label text="Duration (Hours)"/>
+                                <m:VBox>
+                                    <m:Text text="{DurationHours}" visible="{= !${edit>/isEditing} }"/>
+                                    <m:Input id="editDurationHoursInput" value="{DurationHours}" visible="{edit>/isEditing}" type="Number" maxLength="2"/>
+                                </m:VBox>
+                                <m:Label text="Emergency Reason"/>
+                                <m:VBox>
+                                    <m:Text text="{Reason}" visible="{= !${edit>/isEditing} }" wrapping="true"/>
+                                    <m:TextArea id="editReasonInput" value="{Reason}" visible="{edit>/isEditing}" rows="4" maxLength="255"/>
+                                </m:VBox>
+                                <m:Label text="Grant Status"/>
+                                <m:ObjectStatus text="{FfGrantStatus}" state="{= ${FfGrantStatus} === 'ACTIVE' ? 'Success' : (${FfGrantStatus} === 'REVOKED' ? 'None' : 'Warning') }"/>
+                                <m:Label text="Granted From / Until"/>
+                                <m:Text text="{FfStartAt} - {FfEndAt}"/>
+                            </form:SimpleForm>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
             <uxap:ObjectPageSection title="Requested Roles" id="rolesSection">
                 <uxap:subSections>
                     <uxap:ObjectPageSubSection>
@@ -175,6 +213,58 @@
                                     </m:ColumnListItem>
                                 </m:items>
                             </m:Table>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
+            <uxap:ObjectPageSection title="Segregation of Duties" id="sodSection">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection>
+                        <uxap:blocks>
+                            <m:VBox>
+                                <m:Toolbar>
+                                    <m:ToolbarSpacer/>
+                                    <m:Button text="Check SoD" icon="sap-icon://shield" press=".onCheckSodPress"
+                                        enabled="{= !${detail>/sodLoading} }"/>
+                                </m:Toolbar>
+                                <m:MessageStrip text="Run Check SoD to load the current conflict result."
+                                    type="Information" showIcon="true" visible="{= !${detail>/sodChecked} }"/>
+                            <m:Table items="{detail>/sodConflicts}" noDataText="No SoD conflicts for this request.">
+                                <m:columns>
+                                    <m:Column><m:Text text="Risk"/></m:Column>
+                                    <m:Column><m:Text text="Rule"/></m:Column>
+                                    <m:Column><m:Text text="Role Pair"/></m:Column>
+                                    <m:Column><m:Text text="Exemption"/></m:Column>
+                                    <m:Column><m:Text text="Suggested Action"/></m:Column>
+                                </m:columns>
+                                <m:items>
+                                    <m:ColumnListItem>
+                                        <m:cells>
+                                            <m:ObjectStatus text="{detail>RiskLevel}" state="{= ${detail>RiskLevel} === 'C' ? 'Error' : (${detail>RiskLevel} === 'H' ? 'Warning' : 'Information') }"/>
+                                            <m:Text text="{detail>RuleId} - {detail>RuleName}"/>
+                                            <m:Text text="{detail>Role1} / {detail>Role2}"/>
+                                            <m:Text text="{= ${detail>IsExempt} ? ${detail>ExemptReason} : 'No active exemption' }"/>
+                                            <m:Text text="{detail>SuggestedAction}"/>
+                                        </m:cells>
+                                    </m:ColumnListItem>
+                                </m:items>
+                            </m:Table>
+                            </m:VBox>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
+            <uxap:ObjectPageSection title="Approval Rationale" id="approvalRationaleSection">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection>
+                        <uxap:blocks>
+                            <m:VBox>
+                                <m:Button text="Show approval rationale" icon="sap-icon://discussion-2" press=".onShowApprovalRationale"/>
+                                <m:MessageStrip text="{detail>/approvalReason}" type="Warning" showIcon="true"
+                                    visible="{= !!${detail>/approvalReason} }" class="sapUiSmallMarginTop"/>
+                            </m:VBox>
                         </uxap:blocks>
                     </uxap:ObjectPageSubSection>
                 </uxap:subSections>

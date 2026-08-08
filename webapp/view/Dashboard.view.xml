@@ -34,10 +34,10 @@
                     </VBox>
                     <VBox class="sapUiTinyMarginEnd">
                         <Label text="Department" />
-                        <ComboBox id="departmentFilter" width="13rem" placeholder="All departments"
+                        <ComboBox id="departmentFilter" width="18rem" placeholder="All departments"
                             selectionChange=".onFilterChange" change=".onFilterChange"
-                            items="{filters>/departments}">
-                            <core:Item key="{filters>DepartmentID}" text="{filters>DepartmentID}" additionalText="{filters>DepartmentName}" />
+                            showSecondaryValues="true" items="{filters>/departments}">
+                            <core:Item key="{filters>DepartmentID}" text="{filters>DepartmentID} - {filters>DepartmentName}" additionalText="{filters>DepartmentName}" />
                         </ComboBox>
                     </VBox>
                     <VBox class="sapUiTinyMarginEnd">
@@ -56,6 +56,13 @@
             <Table id="requestTable"
                 items="{
                     path: '/Request',
+                    filters: [
+                        {
+                            path: 'IsActiveEntity',
+                            operator: 'EQ',
+                            value1: true
+                        }
+                    ],
                     parameters: {
                         $count: true
                     }

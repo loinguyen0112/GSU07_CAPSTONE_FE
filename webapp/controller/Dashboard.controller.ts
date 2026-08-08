@@ -20,6 +20,9 @@ export default class Dashboard extends Controller {
 
     public onInit(): void {
         this.getView()?.setModel(new JSONModel({ departments: [], roles: [] }), "filters");
+        // RAP exposes technical draft instances in the same entity set. The
+        // declarative list filter in Dashboard.view.xml applies the initial
+        // active-entity restriction before the table binding is available.
         void this._loadFilterOptions();
     }
 
@@ -37,7 +40,9 @@ export default class Dashboard extends Controller {
     }
 
     private _applyFilters(): void {
-        const aFilters: Filter[] = [];
+        const aFilters: Filter[] = [
+            new Filter("IsActiveEntity", FilterOperator.EQ, true)
+        ];
         
         const oSearchField = this.byId("searchField") as SearchField;
         const sQuery = oSearchField.getValue();

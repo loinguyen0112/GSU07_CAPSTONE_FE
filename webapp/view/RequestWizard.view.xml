@@ -5,32 +5,121 @@
     xmlns="sap.m">
     <Page title="Create Request" showNavButton="true" navButtonPress=".onNavBack" enableScrolling="false">
         <content>
+            <!-- sap.m.Wizard requires at least three steps. Leaver has a separate,
+                 supported two-stage flow because no role request or SoD check is needed. -->
+            <VBox id="LeaverRequestFlow" visible="{= ${review>/request/ReqType} === 'L' }" class="iamLeaverFlow">
+                <!-- Custom two-step navigator: sap.m.Wizard itself requires at least three steps. -->
+                <HBox justifyContent="Center" alignItems="Start" class="iamLeaverProgress sapUiMediumMarginBottom">
+                    <VBox alignItems="Center" class="iamLeaverProgressStep">
+                        <Text text="1" class="iamLeaverProgressNumber iamLeaverProgressNumberActive"/>
+                        <Text text="User Information" class="iamLeaverProgressLabel iamLeaverProgressLabelActive"/>
+                    </VBox>
+                    <VBox justifyContent="Center" class="iamLeaverProgressConnector">
+                        <Text text=" " visible="{= ${review>/leaverStep} === 2 }"
+                              class="iamLeaverProgressLine iamLeaverProgressLineActive"/>
+                        <Text text=" " visible="{= ${review>/leaverStep} !== 2 }"
+                              class="iamLeaverProgressLine"/>
+                    </VBox>
+                    <VBox alignItems="Center" class="iamLeaverProgressStep">
+                        <Text text="2" visible="{= ${review>/leaverStep} === 2 }"
+                              class="iamLeaverProgressNumber iamLeaverProgressNumberActive"/>
+                        <Text text="2" visible="{= ${review>/leaverStep} !== 2 }"
+                              class="iamLeaverProgressNumber"/>
+                        <Text text="Review and Submit" visible="{= ${review>/leaverStep} === 2 }"
+                              class="iamLeaverProgressLabel iamLeaverProgressLabelActive"/>
+                        <Text text="Review and Submit" visible="{= ${review>/leaverStep} !== 2 }"
+                              class="iamLeaverProgressLabel"/>
+                    </VBox>
+                </HBox>
+
+                <VBox visible="{= ${review>/leaverStep} === 1 }">
+                    <Title text="1. User Information" level="H3" class="sapUiSmallMarginBottom"/>
+                    <form:SimpleForm layout="ColumnLayout">
+                        <Label text="Request Type" required="true"/>
+                        <Select id="leaverReqTypeSelect" selectedKey="{review>/request/ReqType}" forceSelection="true" change=".onRequestTypeChange">
+                            <core:Item key="J" text="Joiner"/>
+                            <core:Item key="M" text="Mover"/>
+                            <core:Item key="L" text="Leaver"/>
+                            <core:Item key="F" text="Firefighter Access"/>
+                        </Select>
+                        <Label text="SAP User" required="true"/>
+                        <Input id="leaverTargetUserInput" value="{review>/request/TargetUser}" maxLength="12"
+                               liveChange=".onUserInfoChange"/>
+                    </form:SimpleForm>
+                    <MessageStrip text="A Leaver request deactivates the target user's access. No new role can be requested."
+                                  type="Information" showIcon="true" class="sapUiMediumMarginTop"/>
+                    <HBox justifyContent="End" class="sapUiMediumMarginTop">
+                        <Button text="Continue to Review" type="Emphasized" press=".onLeaverReview" icon="sap-icon://navigation-right-arrow"/>
+                    </HBox>
+                </VBox>
+
+                <VBox visible="{= ${review>/leaverStep} === 2 }">
+                    <Title text="2. Review and Submit" level="H3" class="sapUiSmallMarginBottom"/>
+                    <MessageStrip text="Confirm that this employee should be processed as a Leaver. The request will be submitted for approval."
+                                  type="Information" showIcon="true" class="sapUiSmallMarginBottom"/>
+                    <form:SimpleForm layout="ColumnLayout">
+                        <Label text="Request Type"/>
+                        <Text text="Leaver"/>
+                        <Label text="SAP User"/>
+                        <Text text="{review>/request/TargetUser}"/>
+                    </form:SimpleForm>
+                    <HBox class="sapUiMediumMarginTop">
+                        <Button text="Back" type="Transparent" press=".onLeaverBackToUserInfo" icon="sap-icon://navigation-left-arrow" class="sapUiTinyMarginEnd"/>
+                        <Button text="Save" type="Transparent" press=".onSaveDraft" icon="sap-icon://save" class="sapUiTinyMarginEnd"/>
+                        <Button text="Submit for Approval" type="Emphasized" press=".onSubmitApproval" icon="sap-icon://paper-plane"
+                                enabled="{= !${review>/submission/busy} &amp;&amp; !${review>/submission/timedOut} }"/>
+                    </HBox>
+                </VBox>
+            </VBox>
+
+            <VBox id="StandardRequestFlow" visible="{= ${review>/request/ReqType} !== 'L' }">
             <Wizard id="CreateRequestWizard" complete=".onWizardCompleted">
                 <WizardStep id="UserInfoStep" title="User Information" validated="false">
                     <form:SimpleForm layout="ColumnLayout">
                         <Label text="Request Type" required="true"/>
-                        <Select id="reqTypeSelect" selectedKey="{review>/request/ReqType}" forceSelection="true">
+                        <Select id="reqTypeSelect" selectedKey="{review>/request/ReqType}" forceSelection="true" change=".onRequestTypeChange">
                             <core:Item key="J" text="Joiner"/>
                             <core:Item key="M" text="Mover"/>
                             <core:Item key="L" text="Leaver"/>
+                            <core:Item key="F" text="Firefighter Access"/>
                         </Select>
                         
-                        <Label text="Employee ID (Target User)" required="true"/>
+                        <Label text="SAP User" required="true"/>
                         <Input id="targetUserInput" value="{review>/request/TargetUser}" maxLength="12" liveChange=".onUserInfoChange"/>
                         
-                        <Label text="Email" required="true"/>
-                        <Input id="emailInput" value="{review>/request/Email}" maxLength="241" liveChange=".onUserInfoChange" type="Email"/>
+                        <Label text="Email" required="true" visible="{= ${review>/request/ReqType} === 'J' }"/>
+                        <Input id="emailInput" value="{review>/request/Email}" maxLength="241" liveChange=".onUserInfoChange" type="Email"
+                               visible="{= ${review>/request/ReqType} === 'J' }"/>
                         
-                        <Label text="First Name"/>
-                        <Input id="firstNameInput" value="{review>/request/FirstName}" maxLength="40"/>
+                        <Label text="First Name" visible="{= ${review>/request/ReqType} === 'J' }"/>
+                        <Input id="firstNameInput" value="{review>/request/FirstName}" maxLength="40"
+                               visible="{= ${review>/request/ReqType} === 'J' }"/>
                         
-                        <Label text="Last Name"/>
-                        <Input id="lastNameInput" value="{review>/request/LastName}" maxLength="40"/>
+                        <Label text="Last Name" visible="{= ${review>/request/ReqType} === 'J' }"/>
+                        <Input id="lastNameInput" value="{review>/request/LastName}" maxLength="40"
+                               visible="{= ${review>/request/ReqType} === 'J' }"/>
                         
-                        <Label text="Department"/>
+                        <Label text="{= ${review>/request/ReqType} === 'M' ? 'New Department' : 'Department' }"
+                               required="{= ${review>/request/ReqType} === 'M' }"
+                               visible="{= ${review>/request/ReqType} === 'J' || ${review>/request/ReqType} === 'M' }"/>
                         <Input id="departmentInput" value="{review>/request/Department}" maxLength="40"
-                               showValueHelp="true" valueHelpRequest=".onDepartmentVHRequest"
-                               placeholder="Select department..."/>
+                               showValueHelp="true" valueHelpOnly="true" valueHelpRequest=".onDepartmentVHRequest"
+                               placeholder="Select department..." visible="{= ${review>/request/ReqType} === 'J' || ${review>/request/ReqType} === 'M' }"/>
+
+                        <Label text="Emergency Ticket ID" required="true" visible="{= ${review>/request/ReqType} === 'F' }"/>
+                        <Input id="ticketIdInput" value="{review>/request/TicketId}" maxLength="40"
+                               visible="{= ${review>/request/ReqType} === 'F' }" liveChange=".onFirefighterChange"
+                               placeholder="Incident or change ticket"/>
+
+                        <Label text="Emergency Reason" required="true" visible="{= ${review>/request/ReqType} === 'F' }"/>
+                        <TextArea id="reasonInput" value="{review>/request/Reason}" rows="3" maxLength="255"
+                                  visible="{= ${review>/request/ReqType} === 'F' }" liveChange=".onFirefighterChange"
+                                  placeholder="Why is emergency access required?"/>
+
+                        <Label text="Duration (Hours)" required="true" visible="{= ${review>/request/ReqType} === 'F' }"/>
+                        <Input id="durationHoursInput" value="{review>/request/DurationHours}" type="Number" maxLength="2"
+                               visible="{= ${review>/request/ReqType} === 'F' }" liveChange=".onFirefighterChange"
+                               placeholder="1 - 24"/>
                     </form:SimpleForm>
                 </WizardStep>
 
@@ -47,10 +136,10 @@
                             <Column>
                                 <Text text="Role Name"/>
                             </Column>
-                            <Column>
+                            <Column visible="{= ${review>/request/ReqType} !== 'F' }">
                                 <Text text="Valid From"/>
                             </Column>
-                            <Column>
+                            <Column visible="{= ${review>/request/ReqType} !== 'F' }">
                                 <Text text="Valid To"/>
                             </Column>
                             <Column width="3rem" hAlign="Center"/>
@@ -60,35 +149,60 @@
                                 <cells>
                                     <Input value="{review>RoleName}" required="true" placeholder="Select role..."
                                            showValueHelp="true" valueHelpRequest=".onRoleVHRequest"
+                                           valueHelpOnly="{= ${review>/request/ReqType} === 'F' }"
                                            liveChange=".onRolePreviewChange"/>
                                     <DatePicker value="{
                                         path: 'review>ValidFrom'
-                                    }" valueFormat="yyyy-MM-dd" displayFormat="MMM dd, yyyy" change=".onRolePreviewChange"/>
+                                    }" valueFormat="yyyy-MM-dd" displayFormat="MMM dd, yyyy" change=".onRolePreviewChange"
+                                       visible="{= ${review>/request/ReqType} !== 'F' }"/>
                                     <DatePicker value="{
                                         path: 'review>ValidTo'
-                                    }" valueFormat="yyyy-MM-dd" displayFormat="MMM dd, yyyy" change=".onRolePreviewChange"/>
+                                    }" valueFormat="yyyy-MM-dd" displayFormat="MMM dd, yyyy" change=".onRolePreviewChange"
+                                       visible="{= ${review>/request/ReqType} !== 'F' }"/>
                                     <Button icon="sap-icon://delete" type="Transparent" press=".onDeleteRole"/>
                                 </cells>
                             </ColumnListItem>
                         </items>
                     </Table>
+                    <MessageStrip text="For Firefighter access, select exactly one active allowlisted emergency role. Duration starts when the request is approved; the expiry job automatically revokes the role at End At."
+                                  type="Information" showIcon="true" visible="{= ${review>/request/ReqType} === 'F' }"
+                                  class="sapUiSmallMarginTop"/>
+                    <Panel headerText="Segregation of Duties Check" class="sapUiSmallMarginTop"
+                           busy="{review>/sod/checking}" busyIndicatorDelay="0">
+                        <headerToolbar>
+                            <OverflowToolbar>
+                                <Title text="SoD Result"/>
+                                <ToolbarSpacer/>
+                                <Button text="{= ${review>/sod/checking} ? 'Checking SoD...' : 'Check SoD' }"
+                                        icon="sap-icon://shield" press=".onCheckSod"
+                                        enabled="{= !${review>/sod/checking} }"/>
+                            </OverflowToolbar>
+                        </headerToolbar>
+                    </Panel>
                 </WizardStep>
 
                 <WizardStep id="ReviewStep" title="Review" activate=".onReviewStepActivate">
                     <MessageStrip text="Please review all information before submitting for approval." type="Information" showIcon="true" class="sapUiSmallMarginBottom"/>
                     <form:SimpleForm layout="ColumnLayout" class="sapUiSmallMarginBottom">
                         <Label text="Request Type"/>
-                        <Text text="{= ${review>/request/ReqType} === 'J' ? 'Joiner' : (${review>/request/ReqType} === 'M' ? 'Mover' : (${review>/request/ReqType} === 'L' ? 'Leaver' : 'Unknown'))}"/>
-                        <Label text="Employee ID"/>
+                        <Text text="{= ${review>/request/ReqType} === 'J' ? 'Joiner' : (${review>/request/ReqType} === 'M' ? 'Mover' : (${review>/request/ReqType} === 'L' ? 'Leaver' : (${review>/request/ReqType} === 'F' ? 'Firefighter Access' : 'Unknown'))) }"/>
+                        <Label text="SAP User"/>
                         <Text text="{review>/request/TargetUser}"/>
-                        <Label text="Name"/>
-                        <Text text="{review>/request/FirstName} {review>/request/LastName}"/>
-                        <Label text="Email"/>
-                        <Text text="{review>/request/Email}"/>
-                        <Label text="Department"/>
-                        <Text text="{review>/request/Department}"/>
+                        <Label text="Name" visible="{= ${review>/request/ReqType} === 'J' }"/>
+                        <Text text="{review>/request/FirstName} {review>/request/LastName}" visible="{= ${review>/request/ReqType} === 'J' }"/>
+                        <Label text="Email" visible="{= ${review>/request/ReqType} === 'J' }"/>
+                        <Text text="{review>/request/Email}" visible="{= ${review>/request/ReqType} === 'J' }"/>
+                        <Label text="{= ${review>/request/ReqType} === 'M' ? 'New Department' : 'Department' }"
+                               visible="{= ${review>/request/ReqType} === 'J' || ${review>/request/ReqType} === 'M' }"/>
+                        <Text text="{review>/request/Department}" visible="{= ${review>/request/ReqType} === 'J' || ${review>/request/ReqType} === 'M' }"/>
+                        <Label text="Emergency Ticket ID" visible="{= ${review>/request/ReqType} === 'F' }"/>
+                        <Text text="{review>/request/TicketId}" visible="{= ${review>/request/ReqType} === 'F' }"/>
+                        <Label text="Emergency Reason" visible="{= ${review>/request/ReqType} === 'F' }"/>
+                        <Text text="{review>/request/Reason}" visible="{= ${review>/request/ReqType} === 'F' }"/>
+                        <Label text="Duration (Hours)" visible="{= ${review>/request/ReqType} === 'F' }"/>
+                        <Text text="{review>/request/DurationHours}" visible="{= ${review>/request/ReqType} === 'F' }"/>
                     </form:SimpleForm>
-                    <Panel headerText="Assigned Roles" class="sapUiSmallMarginBottom">
+                    <Panel headerText="Assigned Roles" class="sapUiSmallMarginBottom" visible="{= ${review>/request/ReqType} !== 'L' }">
                         <Table items="{review>/roles}" mode="None">
                             <columns>
                                 <Column>
@@ -112,12 +226,36 @@
                             </items>
                         </Table>
                     </Panel>
+                    <Panel headerText="Segregation of Duties Result" class="sapUiSmallMarginBottom"
+                           visible="{= ${review>/request/ReqType} !== 'L' &amp;&amp; ${review>/sod/checked} }">
+                        <MessageStrip text="{review>/sod/message}" type="{= ${review>/sod/hasCritical} ? 'Error' : 'Information' }" showIcon="true"/>
+                        <Table items="{review>/sod/conflicts}" visible="{= ${review>/sod/conflicts}.length > 0 }">
+                            <columns>
+                                <Column><Text text="Risk"/></Column>
+                                <Column><Text text="Rule"/></Column>
+                                <Column><Text text="Role Pair"/></Column>
+                                <Column><Text text="Suggested Action"/></Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem>
+                                    <cells>
+                                        <ObjectStatus text="{review>RiskLevel}" state="{= ${review>RiskLevel} === 'C' ? 'Error' : (${review>RiskLevel} === 'H' ? 'Warning' : 'Information') }"/>
+                                        <Text text="{review>RuleId} - {review>RuleName}"/>
+                                        <Text text="{review>Role1} / {review>Role2}"/>
+                                        <Text text="{review>SuggestedAction}"/>
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </Panel>
                     <HBox class="sapUiMediumMarginTop">
                         <Button text="Save" type="Transparent" press=".onSaveDraft" icon="sap-icon://save" class="sapUiTinyMarginEnd"/>
-                        <Button text="Submit for Approval" type="Emphasized" press=".onSubmitApproval" icon="sap-icon://paper-plane"/>
+                        <Button text="Submit for Approval" type="Emphasized" press=".onSubmitApproval" icon="sap-icon://paper-plane"
+                            enabled="{= !${review>/submission/busy} &amp;&amp; !${review>/submission/timedOut} }"/>
                     </HBox>
                 </WizardStep>
             </Wizard>
+            </VBox>
         </content>
     </Page>
 </mvc:View>

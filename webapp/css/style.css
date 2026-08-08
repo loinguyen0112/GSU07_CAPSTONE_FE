@@ -58,3 +58,87 @@
     box-shadow: 0 10px 30px rgba(0,0,0,0.05);
     padding: 2rem;
 }
+
+.iamLeaverFlow {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+    padding: 2rem;
+}
+
+.iamLeaverProgress {
+    border-bottom: 1px solid #d9d9d9;
+    padding: 0.25rem 0 1.25rem;
+}
+
+.iamLeaverProgressStep {
+    min-width: 9rem;
+}
+
+.iamLeaverProgress .iamLeaverProgressNumber {
+    align-items: center;
+    background: #ffffff;
+    border: 0.0625rem solid #8fa3b8;
+    border-radius: 50%;
+    box-sizing: border-box;
+    color: #5b738b;
+    display: inline-flex !important;
+    font-weight: 700;
+    height: 2.25rem;
+    justify-content: center;
+    line-height: 1;
+    width: 2.25rem;
+}
+
+.iamLeaverProgress .iamLeaverProgressNumberActive {
+    background: #0a6ed1;
+    border-color: #0a6ed1;
+    color: #ffffff;
+}
+
+.iamLeaverProgress .iamLeaverProgressLabel {
+    color: #526b84;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-top: 0.5rem;
+    text-align: center;
+}
+
+.iamLeaverProgress .iamLeaverProgressLabelActive {
+    color: #0a6ed1;
+}
+
+.iamLeaverProgressConnector {
+    box-sizing: border-box;
+    padding-top: 1.0625rem;
+    width: clamp(3rem, 12vw, 12rem);
+}
+
+.iamLeaverProgress .iamLeaverProgressLine {
+    background: #d5dde5;
+    display: block !important;
+    height: 0.125rem;
+    width: 100%;
+}
+
+.iamLeaverProgress .iamLeaverProgressLineActive {
+    background: #0a6ed1;
+}
+
+@media (max-width: 37.5rem) {
+    .iamLeaverFlow {
+        padding: 1rem;
+    }
+
+    .iamLeaverProgressStep {
+        min-width: 7rem;
+    }
+
+    .iamLeaverProgressConnector {
+        width: 2rem;
+    }
+
+    .iamLeaverProgress .iamLeaverProgressLabel {
+        font-size: 0.75rem;
+    }
+}

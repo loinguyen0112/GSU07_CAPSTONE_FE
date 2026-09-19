@@ -1,0 +1,5 @@
+CLASS zbp_i_iam_lreq_hdr DEFINITION PUBLIC ABSTRACT FINAL FOR BEHAVIOR OF zi_iam_lreq_hdr.
+ENDCLASS.
+
+CLASS zbp_i_iam_lreq_hdr IMPLEMENTATION.
+ENDCLASS.

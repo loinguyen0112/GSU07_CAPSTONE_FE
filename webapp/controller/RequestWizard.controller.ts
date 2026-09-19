@@ -8,6 +8,7 @@ import Filter from "sap/ui/model/Filter";
 import FilterOperator from "sap/ui/model/FilterOperator";
 import Event from "sap/ui/base/Event";
 import Input from "sap/m/Input";
+import Wizard from "sap/m/Wizard";
 import WizardStep from "sap/m/WizardStep";
 import MessageToast from "sap/m/MessageToast";
 import MessageBox from "sap/m/MessageBox";
@@ -27,6 +28,9 @@ import StandardListItem from "sap/m/StandardListItem";
 import BusyIndicator from "sap/ui/core/BusyIndicator";
 import BusyDialog from "sap/m/BusyDialog";
 import DateFormat from "sap/ui/core/format/DateFormat";
+import Core from "sap/ui/core/Core";
+import Message from "sap/ui/core/message/Message";
+import { MessageType } from "sap/ui/core/library";
 
 type RequestRole = {
     RoleName: string;
@@ -51,7 +55,7 @@ type SodConflict = {
 };
 
 /**
- * @namespace hrrequest.hrm.controller
+ * @namespace ziam.dashboard.controller
  */
 export default class RequestWizard extends Controller {
     private _oDraftContext: Context | null = null;
@@ -63,7 +67,6 @@ export default class RequestWizard extends Controller {
     private _oReviewModel: JSONModel | null = null;
     private _oSubmitBusyDialog: BusyDialog | null = null;
     private _sodCheckInFlight: Promise<{ hasCritical: boolean }> | null = null;
-    private _saveInFlight = false;
     private _lastPersistedRequestPayload = "";
     private _lastPersistedRolePayload = "";
     private _hasPersistedRoleItems = false;
@@ -111,11 +114,16 @@ export default class RequestWizard extends Controller {
             const bTicketValid = Boolean(oTicketInput.getValue().trim());
             const bReasonValid = Boolean(oReasonInput.getValue().trim());
             const sDuration = oDurationInput.getValue().trim();
-            const sDurationMessage = this._getFirefighterDurationError(sDuration, this._getReviewRoles()[0]);
-            const bDurationValid = !sDurationMessage;
+            const iDuration = Number(sDuration);
+            const iRoleMaxHours = Number(this._getReviewRoles()[0]?.MaxHours || 0);
+            const bDurationValid = /^(?:[1-9]|1\d|2[0-4])$/.test(sDuration)
+                && (!iRoleMaxHours || iDuration <= iRoleMaxHours);
+            const sDurationMessage = iRoleMaxHours
+                ? `Duration must be a whole number from 1 to ${Math.min(24, iRoleMaxHours)} hours for the selected role.`
+                : "Duration must be a whole number from 1 to 24 hours.";
             this._setFieldValidity(oTicketInput, bTicketValid, "Emergency ticket ID is required.");
             this._setFieldValidity(oReasonInput, bReasonValid, "Emergency reason is required.");
-            this._setFieldValidity(oDurationInput, bDurationValid, sDurationMessage || "");
+            this._setFieldValidity(oDurationInput, bDurationValid, sDurationMessage);
             oStep.setValidated(bTargetUserValid && bTicketValid && bReasonValid && bDurationValid);
         } else if (sReqType === "M") {
             const bDepartmentValid = Boolean(oDepartmentInput.getValue().trim());
@@ -214,28 +222,28 @@ export default class RequestWizard extends Controller {
     }
 
     public async onReviewStepActivate(): Promise<void> {
+        // The Wizard renders its default finish button (labelled "Review")
+        // on the last step. Submission is handled by the explicit button in
+        // the review content, so hide only that built-in button here.
+        (this.byId("CreateRequestWizard") as Wizard)?.setShowNextButton(false);
         this._syncRequestFromForm();
         this._syncRolePreviewFromTable();
         this._invalidateSodResult();
     }
 
+    public onRoleStepActivate(): void {
+        // Restore the standard Next navigation when the user moves back from
+        // the review step. This keeps the existing Wizard flow unchanged.
+        (this.byId("CreateRequestWizard") as Wizard)?.setShowNextButton(true);
+    }
+
     public onRolePreviewChange(): void {
         this._syncRolePreviewFromTable();
-        if (String(this._oReviewModel?.getProperty("/request/ReqType") || "J") === "F") {
-            // A Firefighter role determines the configured maximum duration.
-            // Revalidate Step 1 whenever the role changes, not only while the
-            // duration field itself is edited.
-            this.onUserInfoChange();
-        }
         this._validateRoleStep();
         this._invalidateSodResult();
     }
 
     public async onCheckSod(): Promise<void> {
-        if (this._oReviewModel?.getProperty("/submission/timedOut") || this._oReviewModel?.getProperty("/submission/busy") || this._saveInFlight) {
-            MessageToast.show("Please wait until the current request operation finishes.");
-            return;
-        }
         await this._checkSod();
         const oSod = this._oReviewModel?.getProperty("/sod") as {
             checked?: boolean; conflicts?: SodConflict[]; message?: string;
@@ -276,7 +284,11 @@ export default class RequestWizard extends Controller {
             RiskState: mRiskState[oConflict.RiskLevel] || "None",
             RuleText: `${oConflict.RuleId} — ${oConflict.RuleName}`,
             RolesText: `${oConflict.Role1}  ↔  ${oConflict.Role2}`,
-            ActionText: oConflict.SuggestedAction || "Review the conflict"
+            ActionText: oConflict.SuggestedAction || "Review the conflict",
+            ExemptionText: oConflict.IsExempt
+                ? (oConflict.ExemptReason ? "Exempt: " + oConflict.ExemptReason : "Exempt")
+                : "No active exemption",
+            ExemptionState: oConflict.IsExempt ? "Success" : "None"
         }));
         const iCritical = aRows.filter((oRow) => oRow.RiskLevel === "C").length;
         const iHigh = aRows.filter((oRow) => oRow.RiskLevel === "H").length;
@@ -295,7 +307,8 @@ export default class RequestWizard extends Controller {
                 new Column({ header: new Text({ text: "Risk" }), width: "6rem" }),
                 new Column({ header: new Text({ text: "Conflict rule" }), minScreenWidth: "Tablet", demandPopin: true }),
                 new Column({ header: new Text({ text: "Conflicting roles" }), minScreenWidth: "Tablet", demandPopin: true }),
-                new Column({ header: new Text({ text: "Suggested action" }), minScreenWidth: "Desktop", demandPopin: true })
+                new Column({ header: new Text({ text: "Suggested action" }), minScreenWidth: "Desktop", demandPopin: true }),
+                new Column({ header: new Text({ text: "Exemption" }), minScreenWidth: "Desktop", demandPopin: true })
             ]
         });
         oTable.bindItems({
@@ -305,7 +318,8 @@ export default class RequestWizard extends Controller {
                     new ObjectStatus({ text: "{sodDialog>RiskText}", state: "{sodDialog>RiskState}" }),
                     new Text({ text: "{sodDialog>RuleText}", wrapping: true }),
                     new Text({ text: "{sodDialog>RolesText}", wrapping: true }),
-                    new Text({ text: "{sodDialog>ActionText}", wrapping: true })
+                    new Text({ text: "{sodDialog>ActionText}", wrapping: true }),
+                    new ObjectStatus({ text: "{sodDialog>ExemptionText}", state: "{sodDialog>ExemptionState}" })
                 ]
             })
         });
@@ -393,19 +407,13 @@ export default class RequestWizard extends Controller {
             Department: sReqType === "J" || sReqType === "M" ? ((this.byId("departmentInput") as Input)?.getValue?.() || "") : "",
             TicketId: sReqType === "F" ? ((this.byId("ticketIdInput") as Input)?.getValue?.() || "") : "",
             Reason: sReqType === "F" ? ((this.byId("reasonInput") as any)?.getValue?.() || "") : "",
-            // OData exposes DurationHours as Edm.Byte; sending a string (for example "2") is rejected by Gateway.
+            // OData exposes DurationHours as Edm.Byte. Non-Firefighter requests
+            // must send a numeric initial value, never an empty string.
             DurationHours: sReqType === "F" && Number.isInteger(iDurationHours) ? iDurationHours : 0
         });
     }
 
     public async onSaveDraft(): Promise<void> {
-        if (this._oReviewModel?.getProperty("/submission/timedOut") || this._sodCheckInFlight || this._saveInFlight
-            || this._oReviewModel?.getProperty("/submission/busy")) {
-            MessageToast.show("Please wait until the current request operation finishes.");
-            return;
-        }
-        this._saveInFlight = true;
-        this._oReviewModel?.setProperty("/saveBusy", true);
         BusyIndicator.show(0);
         try {
             const oModel = this.getView()?.getModel() as ODataModel;
@@ -418,19 +426,12 @@ export default class RequestWizard extends Controller {
             this._oDraftContext = null;
             this.onNavBack();
         } catch (oError: any) {
-            MessageBox.error("Save failed: " + this._getODataErrorMessage(oError));
-        } finally {
             BusyIndicator.hide();
-            this._saveInFlight = false;
-            this._oReviewModel?.setProperty("/saveBusy", false);
+            MessageBox.error("Save failed: " + this._getODataErrorMessage(oError));
         }
     }
 
     public async onSubmitApproval(): Promise<void> {
-        if (this._oReviewModel?.getProperty("/submission/timedOut") || this._oReviewModel?.getProperty("/submission/busy") || this._sodCheckInFlight || this._saveInFlight) {
-            MessageToast.show("Please wait until the current request operation finishes.");
-            return;
-        }
         this._setSubmitState(true, "Creating request draft...", false);
         try {
             const oModel = this.getView()?.getModel() as ODataModel;
@@ -470,7 +471,8 @@ export default class RequestWizard extends Controller {
             ) as any;
             await this._runSubmitStage("Submitting for approval...", async () => {
                 const oSubmitPromise = oSubmitAction.execute(this.CHANGE_GROUP_ID);
-                await this._withDeadline("Submitting for approval", Promise.all([this._submitChanges(oModel), oSubmitPromise]));
+                await this._submitChanges(oModel);
+                await oSubmitPromise;
             });
             this._setSubmitState(false, "", false);
             MessageToast.show("Request submitted for approval successfully!");
@@ -490,19 +492,14 @@ export default class RequestWizard extends Controller {
 
     private async _runSubmitStage<T>(sStage: string, fnOperation: () => Promise<T>): Promise<T> {
         this._setSubmitState(true, sStage, false);
-        return fnOperation();
-    }
-
-    private async _withDeadline<T>(sStage: string, operation: Promise<T>): Promise<T> {
         let iTimeout: ReturnType<typeof setTimeout> | undefined;
         const oTimeout = new Promise<never>((_, reject) => {
             iTimeout = setTimeout(() => {
-                this._oReviewModel?.setProperty("/submission/timedOut", true);
-                reject(new Error(`${sStage} did not respond within ${this.SUBMIT_TIMEOUT_MS / 1000} seconds. Check the request status before retrying.`));
+                reject(new Error(`${sStage} did not respond within ${this.SUBMIT_TIMEOUT_MS / 1000} seconds.`));
             }, this.SUBMIT_TIMEOUT_MS);
         });
         try {
-            return await Promise.race([operation, oTimeout]);
+            return await Promise.race([fnOperation(), oTimeout]);
         } finally {
             if (iTimeout !== undefined) {
                 clearTimeout(iTimeout);
@@ -552,20 +549,15 @@ export default class RequestWizard extends Controller {
         ) as ODataListBinding;
         // A new draft has no role items. Avoid a round trip just to read an empty association.
         const aExistingContexts = this._hasPersistedRoleItems
-            ? await this._withDeadline("Loading requested roles", (oRoleBinding as any).requestContexts(0, 100)) as Context[]
+            ? await (oRoleBinding as any).requestContexts(0, 100)
             : [];
         const aDeletePromises = aExistingContexts.map((oContext: Context) => oContext.delete());
-        try {
-            await this._withDeadline("Saving requested roles", Promise.all([
-                ...aDeletePromises,
-                this._createEntities(oModel, oRoleBinding, aRoles)
-            ]));
-        } catch (error) {
-            // A partial response may have persisted roles. Reload them before any retry.
-            this._hasPersistedRoleItems = true;
-            this._lastPersistedRolePayload = "";
-            throw error;
-        }
+        const aCreatePromises = aRoles.map((oRole) => {
+            const oRoleContext = oRoleBinding.create(oRole, true);
+            return (oRoleContext as any).created?.() || Promise.resolve();
+        });
+        await this._submitChanges(oModel);
+        await Promise.all([...aDeletePromises, ...aCreatePromises]);
         this._lastPersistedRolePayload = sRolePayload;
         this._hasPersistedRoleItems = aRoles.length > 0;
     }
@@ -581,83 +573,41 @@ export default class RequestWizard extends Controller {
             await this._ensureNoDuplicateJoinerRequest(oModel, oRequest);
         }
         if (this._oDraftContext) {
-            const oExistingDraftContext = this._oDraftContext;
-            if (oExistingDraftContext.isTransient?.() || oExistingDraftContext.getPath().includes("$uid")) {
-                if (this._oDraftContext === oExistingDraftContext) {
-                    this._oDraftContext = null;
-                }
-                throw new Error("The draft request is still being created. Please try again after it finishes.");
-            }
             const sRequestPayload = JSON.stringify(oRequest);
             if (this._lastPersistedRequestPayload !== sRequestPayload) {
-                Object.entries(oRequest).forEach(([sName, sValue]) => oExistingDraftContext.setProperty(sName, sValue));
+                Object.entries(oRequest).forEach(([sName, sValue]) => this._oDraftContext?.setProperty(sName, sValue));
                 await this._submitChanges(oModel);
                 this._lastPersistedRequestPayload = sRequestPayload;
             }
-            return oExistingDraftContext;
+            return this._oDraftContext;
         }
         const oListBinding = oModel.bindList(
             "/Request", undefined, undefined, undefined,
             { $$updateGroupId: this.CHANGE_GROUP_ID }
         ) as ODataListBinding;
-        const [oDraftContext] = await this._createEntities(oModel, oListBinding, [{ ...oRequest }]);
-        this._oDraftContext = oDraftContext;
-        if (oDraftContext.isTransient?.() || oDraftContext.getPath().includes("$uid")) {
+        this._oDraftContext = oListBinding.create({ ...oRequest }, true);
+        await this._submitChanges(oModel);
+        if (this._oDraftContext.getPath().includes("$uid")) {
+            const sServerMessage = this._getLatestODataMessage();
             this._oDraftContext = null;
-            throw new Error("The OData service did not return a persisted draft context.");
+            throw new Error(
+                sServerMessage
+                    || "Draft creation was rejected by the service. Check the Gateway error log for details."
+            );
         }
         this._lastPersistedRequestPayload = JSON.stringify(oRequest);
-        return oDraftContext;
+        return this._oDraftContext;
     }
 
     private async _executeDraftAction(oModel: ODataModel, oDraftContext: Context, sAction: "Prepare" | "Activate"): Promise<void> {
         const oAction = oModel.bindContext(`${this.SERVICE_NAMESPACE}.${sAction}(...)`, oDraftContext) as any;
         const oActionPromise = oAction.execute(this.CHANGE_GROUP_ID);
-        await this._withDeadline(sAction, Promise.all([this._submitChanges(oModel), oActionPromise]));
+        await this._submitChanges(oModel);
+        await oActionPromise;
     }
 
     private _submitChanges(oModel: ODataModel): Promise<void> {
-        return this._withDeadline("Sending request", oModel.submitBatch(this.CHANGE_GROUP_ID));
-    }
-
-    /** created() stays pending after an HTTP error. Observe each POST response instead. */
-    private async _createEntities(oModel: ODataModel, binding: ODataListBinding, payloads: object[]): Promise<Context[]> {
-        const contexts: Context[] = [];
-        const results = new Map<Context, (success: boolean) => void>();
-        const completed = (event: Event): void => {
-            const parameters = event.getParameters() as { context: Context; success: boolean };
-            results.get(parameters.context)?.(parameters.success);
-        };
-        binding.attachCreateCompleted(completed);
-        try {
-            const responses = payloads.map(payload => {
-                const context = binding.create(payload, true);
-                contexts.push(context);
-                // Cancellation during cleanup rejects created(); it is not our POST error signal.
-                void context.created()?.catch(() => undefined);
-                return new Promise<boolean>(resolve => results.set(context, resolve));
-            });
-            const [, success] = await this._withDeadline("Creating request data", Promise.all([
-                this._submitChanges(oModel), Promise.all(responses)
-            ]));
-            if (success.some(value => !value)) {
-                const messages = contexts.flatMap(context => oModel.getMessages(context))
-                    .filter(message => message.getType() === "Error")
-                    .map(message => message.getMessage());
-                throw new Error([...new Set(messages)].join("\n") || "SAP rejected the request data. Check the service error details.");
-            }
-            return contexts;
-        } catch (error) {
-            if (!this._oReviewModel?.getProperty("/submission/timedOut")) {
-                // Failed transient creates must not be retried by a later submitBatch.
-                await this._withDeadline("Clearing failed request data", Promise.all(
-                    contexts.filter(context => context.isTransient()).map(context => context.delete(this.CHANGE_GROUP_ID))
-                ));
-            }
-            throw error;
-        } finally {
-            binding.detachCreateCompleted(completed);
-        }
+        return oModel.submitBatch(this.CHANGE_GROUP_ID);
     }
 
     private _getReviewRoles(): RequestRole[] {
@@ -689,8 +639,7 @@ export default class RequestWizard extends Controller {
             roles: [],
             sod: { checking: false, checked: false, hasCritical: false, conflicts: [], message: "" },
             leaverStep: 1,
-            submission: { busy: false, stage: "", timedOut: false },
-            saveBusy: false
+            submission: { busy: false, stage: "", timedOut: false }
         };
     }
 
@@ -716,24 +665,10 @@ export default class RequestWizard extends Controller {
         if (!oRequest.TicketId || !oRequest.Reason) {
             return "Ticket ID and emergency reason are required for Firefighter access.";
         }
-        return this._getFirefighterDurationError(
-            oRequest.DurationHours,
-            aRoles.find((oRole) => Boolean(oRole.RoleName?.trim()))
-        );
-    }
-
-    private _getFirefighterDurationError(vDuration: unknown, oRole?: RequestRole): string | undefined {
-        const sDuration = String(vDuration ?? "").trim();
-        const iDuration = Number(sDuration);
-        if (!/^(?:[1-9]|1\d|2[0-4])$/.test(sDuration)) {
-            return "Duration must be an integer from 1 to 24 hours.";
-        }
-
-        const iRoleMaxHours = Number(oRole?.MaxHours || 0);
-        if (iRoleMaxHours > 0 && iDuration > iRoleMaxHours) {
-            return `Duration exceeds the configured maximum of ${iRoleMaxHours} hour(s) for role ${oRole?.RoleName || "the selected role"}.`;
-        }
-        return undefined;
+        const iDuration = Number(oRequest.DurationHours);
+        return Number.isInteger(iDuration) && iDuration >= 1 && iDuration <= 24
+            ? undefined
+            : "Duration must be an integer from 1 to 24 hours.";
     }
 
     private _isEmailValid(sEmail: string): boolean {
@@ -764,7 +699,7 @@ export default class RequestWizard extends Controller {
                 $select: "ReqUuid,ReqId,Status"
             }
         ) as ODataListBinding;
-        const aExistingRequests = await this._withDeadline("Checking existing requests", (oDuplicateBinding as any).requestContexts(0, 20)) as Context[];
+        const aExistingRequests = await (oDuplicateBinding as any).requestContexts(0, 20) as Context[];
         const oDuplicate = aExistingRequests.find((oContext) => String(oContext.getProperty("Status") || "") !== "04");
 
         if (oDuplicate) {
@@ -818,8 +753,9 @@ export default class RequestWizard extends Controller {
             }
             const oAction = oModel.bindContext(`${this.SERVICE_NAMESPACE}.checkSod(...)`, oDraftContext) as any;
             const oActionPromise = oAction.execute(this.CHANGE_GROUP_ID);
-            await this._withDeadline("Checking SoD", Promise.all([this._submitChanges(oModel), oActionPromise]));
-            const oResult = await this._withDeadline("Reading SoD result", Promise.resolve(oAction.getBoundContext?.()?.requestObject?.()));
+            await this._submitChanges(oModel);
+            await oActionPromise;
+            const oResult = await oAction.getBoundContext?.()?.requestObject?.();
             const aConflicts = (oResult?.value || oResult?.Conflicts || []).map((oConflict: any) => this._normalizeSodConflict(oConflict));
             const hasCritical = aConflicts.some((oConflict: SodConflict) => oConflict.RiskLevel === "C");
             this._oReviewModel?.setProperty("/sod", {
@@ -836,16 +772,13 @@ export default class RequestWizard extends Controller {
                 checking: false, checked: false, hasCritical: false, conflicts: [],
                 message: `SoD check failed: ${sErrorText}`
             });
-            if (oExistingDraftContext) {
-                throw oError;
-            }
             return { hasCritical: false };
         } finally {
             // A manual pre-check needs a draft only because checkSod is a
             // bound RAP action. It is not a business request yet. Discard it
             // after the result is read, including error paths. Submit passes
             // its own draft context and keeps it until Activate/submit ends.
-            if (bTemporaryDraft && oDraftContext && oModel && !this._oReviewModel?.getProperty("/submission/timedOut")) {
+            if (bTemporaryDraft && oDraftContext && oModel) {
                 await this._discardDraft(oModel, oDraftContext);
             }
         }
@@ -864,11 +797,21 @@ export default class RequestWizard extends Controller {
                 // Fall through to the regular UI5 error properties.
             }
         }
-        const vMessage = oError?.error?.message || oError?.cause?.error?.message
-            || oError?.cause?.message || oError?.message;
+        const vMessage = oError?.error?.message || oError?.message;
         return typeof vMessage === "string" && vMessage
             ? vMessage
-            : "No technical message was returned by the service.";
+            : this._getLatestODataMessage()
+                || "No technical message was returned by the service.";
+    }
+
+    /** Reads the newest server-side UI5 error message after a failed OData batch. */
+    private _getLatestODataMessage(): string | undefined {
+        const aMessages = Core.getMessageManager().getMessageModel().getData() as unknown as Message[];
+        const oLatestError = [...aMessages].reverse().find(
+            (oMessage) => oMessage.getType() === MessageType.Error
+        );
+        const sMessage = oLatestError?.getMessage().trim() || "";
+        return sMessage || undefined;
     }
 
     private _normalizeSodConflict(oConflict: any): SodConflict {
@@ -985,7 +928,6 @@ export default class RequestWizard extends Controller {
                 this._oReviewModel?.setProperty(`${sRolePath}/MaxHours`, iMaxHours);
             }
             this._syncRolePreviewFromTable();
-            this.onUserInfoChange();
             this._validateRoleStep();
             this._invalidateSodResult();
         }
@@ -1022,17 +964,15 @@ export default class RequestWizard extends Controller {
                 oDraftContext
             ) as any;
             const oDiscardPromise = oDiscardAction.execute(this.CHANGE_GROUP_ID);
-            await this._withDeadline("Discarding temporary draft", Promise.all([this._submitChanges(oModel), oDiscardPromise]));
+            await this._submitChanges(oModel);
+            await oDiscardPromise;
         } catch {
-            if (this._oReviewModel?.getProperty("/submission/timedOut")) {
-                return;
-            }
             // If the draft has already disappeared, deleting the local draft
             // context is sufficient. Do not surface cleanup failures to the
             // requester after a successful check or navigation.
             try {
-                const deletion = oDraftContext.delete(this.CHANGE_GROUP_ID);
-                await this._withDeadline("Deleting temporary draft", Promise.all([deletion, this._submitChanges(oModel)]));
+                await oDraftContext.delete(this.CHANGE_GROUP_ID);
+                await this._submitChanges(oModel);
             } catch {
                 // Best effort; the backend housekeeping job handles orphaned
                 // drafts caused by browser termination or network loss.

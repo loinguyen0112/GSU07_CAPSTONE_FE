@@ -38,8 +38,9 @@ CLASS zcl_iam_sod_request_checker IMPLEMENTATION.
     DATA lt_existing_roles TYPE tt_role.
     DATA lt_roles TYPE tt_role.
 
+    "Valid-date filtering cannot use AGR_USERS generic buffering; force one DB set read.
     SELECT agr_name
-      FROM agr_users
+  FROM agr_users BYPASSING BUFFER "#EC CI_GENBUFF
       WHERE uname = @iv_target_user
         AND from_dat <= @sy-datum
         AND to_dat >= @sy-datum
@@ -52,7 +53,8 @@ CLASS zcl_iam_sod_request_checker IMPLEMENTATION.
     ENDLOOP.
 
     "The administrator scan evaluates every existing role pair.
-    "The request flow evaluates only a newly requested role against an existing role.
+    "The request flow evaluates a requested role against an existing role and
+    "also detects conflicts where both sides are requested in the same request.
     IF iv_request_vs_existing = abap_false.
       lt_roles = lt_existing_roles.
       LOOP AT it_requested_roles INTO DATA(ls_requested_role).
@@ -77,8 +79,15 @@ CLASS zcl_iam_sod_request_checker IMPLEMENTATION.
         DATA(lv_role2_requested) = xsdbool( line_exists( it_requested_roles[ agr_name = ls_rule-conflict_role2 ] ) ).
         DATA(lv_role1_existing) = xsdbool( line_exists( lt_existing_roles[ agr_name = ls_rule-conflict_role1 ] ) ).
         DATA(lv_role2_existing) = xsdbool( line_exists( lt_existing_roles[ agr_name = ls_rule-conflict_role2 ] ) ).
-        IF ( lv_role1_requested = abap_false OR lv_role2_existing = abap_false )
-           AND ( lv_role2_requested = abap_false OR lv_role1_existing = abap_false ).
+        "A request can introduce both sides of the conflict at once.  Keep
+        "existing-role checks, but also detect requested-role pairs before
+        "the new roles are assigned to the user.
+        IF NOT ( ( lv_role1_requested = abap_true
+                   AND lv_role2_requested = abap_true )
+                 OR ( lv_role1_requested = abap_true
+                      AND lv_role2_existing = abap_true )
+                 OR ( lv_role2_requested = abap_true
+                      AND lv_role1_existing = abap_true ) ).
           CONTINUE.
         ENDIF.
       ELSE.

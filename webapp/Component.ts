@@ -2,7 +2,7 @@ import BaseComponent from "sap/ui/core/UIComponent";
 import { createDeviceModel } from "./model/models";
 
 /**
- * @namespace hrrequest.hrm
+ * @namespace ziam.dashboard
  */
 export default class Component extends BaseComponent {
 

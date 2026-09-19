@@ -26,7 +26,6 @@ etag master LastChangedAt
     validation validateEmail;
     validation validateDepartment;
     validation validateJoiner;
-    validation validateFirefighter;
   }
 
   field ( numbering : managed, readonly ) ReqUuid;
@@ -38,14 +37,12 @@ etag master LastChangedAt
   validation validateEmail on save { field ReqType, Email; create; update; }
   validation validateDepartment on save { field ReqType, Department; create; update; }
   validation validateJoiner on save { field ReqType, TargetUser; create; update; }
-  validation validateFirefighter on save { field ReqType, DurationHours; create; update; }
 
   action ( features : instance ) submitForApproval result [1] $self;
   action ( features : instance ) approve parameter ZI_IAM_APPROVE_PARAM result [1] $self;
   action ( features : instance ) reject result [1] $self;
   action checkSod result [0..*] ZI_IAM_SOD_ACTION_RESULT;
   action getApprovalRationale result [1] ZI_IAM_APPROVE_PARAM;
-  static action ( authorization : none ) getCapabilities result [1] ZI_IAM_REQ_CAPABILITY;
 
   determination setDefaultValues on modify { create; }
 

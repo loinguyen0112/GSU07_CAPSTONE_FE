@@ -1,7 +1,7 @@
 import Controller from "sap/ui/core/mvc/Controller";
 
 /**
- * @namespace hrrequest.hrm.controller
+ * @namespace ziam.dashboard.controller
  */
 export default class Main extends Controller {
 

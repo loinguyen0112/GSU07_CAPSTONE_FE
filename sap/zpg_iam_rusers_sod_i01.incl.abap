@@ -4,8 +4,6 @@
 *& This include is placed after global DATA and before the local class.
 *&---------------------------------------------------------------------*
 
-Wall time: 0.2 seconds
-Output:
 *& Include ZPG_RUSERS_02_SOD_TYPES
 TYPES:
   BEGIN OF gty_iam_sod_popup,
@@ -23,7 +21,6 @@ TYPES:
     last_login       TYPE xuldate,
   END OF gty_iam_sod_popup.
 
-Output:
 *& Include ZPG_RUSERS_02_SOD_FORMS
 *& SoD check and controlled role-removal extension for ZPG_RUSERS_02
 FORM check_sod.
@@ -40,7 +37,7 @@ FORM check_sod.
     INSERT ls_user-bname INTO TABLE lt_users.
   ENDLOOP.
   IF lt_users IS INITIAL.
-    MESSAGE 'Select at least one user before checking SoD' TYPE 'S' DISPLAY LIKE 'W'.
+    MESSAGE s011(zmsg_iam07) DISPLAY LIKE 'W'.
     RETURN.
   ENDIF.
 
@@ -49,7 +46,7 @@ FORM check_sod.
     APPEND CORRESPONDING #( ls_conflict ) TO lt_popup.
   ENDLOOP.
   IF lt_popup IS INITIAL.
-    MESSAGE 'No SoD conflicts found for selected users' TYPE 'S'.
+    MESSAGE s023(zmsg_iam07).
     RETURN.
   ENDIF.
 
@@ -109,9 +106,10 @@ FORM review_sod_conflict USING ps_conflict TYPE gty_iam_sod_popup.
   DATA lv_answer TYPE c.
   DATA lv_success TYPE abap_bool.
   DATA lv_message TYPE string.
+  DATA lv_question TYPE string.
 
   IF ps_conflict-is_exempt = abap_true.
-    MESSAGE |Rule { ps_conflict-rule_id } is currently exempt; no role was removed| TYPE 'S' DISPLAY LIKE 'W'.
+    MESSAGE s024(zmsg_iam07) WITH ps_conflict-rule_id DISPLAY LIKE 'W'.
     RETURN.
   ENDIF.
 
@@ -144,7 +142,7 @@ FORM review_sod_conflict USING ps_conflict TYPE gty_iam_sod_popup.
     lv_role = ls_role_choice-role.
   ENDLOOP.
   IF lv_selected_count <> 1.
-    MESSAGE 'Select exactly one of the two conflicting roles' TYPE 'S' DISPLAY LIKE 'E'.
+    MESSAGE s022(zmsg_iam07) DISPLAY LIKE 'E'.
     RETURN.
   ENDIF.
 
@@ -152,20 +150,26 @@ FORM review_sod_conflict USING ps_conflict TYPE gty_iam_sod_popup.
                   fieldtext = 'Review reason' field_obl = 'X' ) TO lt_fields.
   CALL FUNCTION 'POPUP_GET_VALUES'
     EXPORTING popup_title = |Review SoD rule { ps_conflict-rule_id }|
-    TABLES    fields      = lt_fields.
+    TABLES    fields      = lt_fields
+    EXCEPTIONS
+      error_in_fields = 1
+      OTHERS          = 2.
   IF sy-subrc <> 0.
     RETURN.
   ENDIF.
   READ TABLE lt_fields INDEX 1 INTO DATA(ls_reason).
   IF ls_reason-value IS INITIAL.
-    MESSAGE 'Review reason is mandatory' TYPE 'S' DISPLAY LIKE 'E'.
+    MESSAGE s021(zmsg_iam07) DISPLAY LIKE 'E'.
     RETURN.
   ENDIF.
+
+  MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '025'
+    WITH lv_role ps_conflict-target_user INTO lv_question.
 
   CALL FUNCTION 'POPUP_TO_CONFIRM'
     EXPORTING
       titlebar              = 'Confirm SoD remediation'
-      text_question         = |Remove role { lv_role } from user { ps_conflict-target_user }?|
+      text_question         = lv_question
       text_button_1         = 'Remove role'
       icon_button_1         = 'ICON_DELETE'
       text_button_2         = 'Cancel'

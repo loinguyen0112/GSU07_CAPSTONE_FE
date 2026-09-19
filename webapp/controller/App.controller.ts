@@ -3,9 +3,11 @@ import UIComponent from "sap/ui/core/UIComponent";
 import Router from "sap/m/routing/Router";
 import Event from "sap/ui/base/Event";
 import FlexibleColumnLayout from "sap/f/FlexibleColumnLayout";
+import ToolPage from "sap/tnt/ToolPage";
+import Button from "sap/m/Button";
 
 /**
- * @namespace hrrequest.hrm.controller
+ * @namespace ziam.dashboard.controller
  */
 export default class App extends Controller {
 
@@ -27,4 +29,15 @@ export default class App extends Controller {
         }
     }
 
+    public onNavToDashboard(): void {
+        const oRouter = (this.getOwnerComponent() as UIComponent).getRouter() as Router;
+        oRouter.navTo("RouteDashboard");
+    }
+
+    public onToggleSideNavigation(): void {
+        const toolPage = this.byId("toolPage") as ToolPage;
+        toolPage.toggleSideContentMode();
+        const toggleButton = this.byId("toggleSideNavigationButton") as Button;
+        toggleButton.setTooltip(toolPage.getSideExpanded() ? "Collapse navigation" : "Expand navigation");
+    }
 }

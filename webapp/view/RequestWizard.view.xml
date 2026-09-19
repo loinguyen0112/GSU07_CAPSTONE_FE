@@ -1,9 +1,9 @@
-<mvc:View controllerName="hrrequest.hrm.controller.RequestWizard"
+<mvc:View controllerName="ziam.dashboard.controller.RequestWizard"
     xmlns:mvc="sap.ui.core.mvc" displayBlock="true"
     xmlns:form="sap.ui.layout.form"
     xmlns:core="sap.ui.core"
     xmlns="sap.m">
-    <Page title="Create Request" showNavButton="true" navButtonPress=".onNavBack" enableScrolling="true">
+    <Page title="Create Request" showNavButton="true" navButtonPress=".onNavBack" enableScrolling="true" class="iamRequestWizardPage">
         <content>
             <!-- sap.m.Wizard requires at least three steps. Leaver has a separate,
                  supported two-stage flow because no role request or SoD check is needed. -->
@@ -65,10 +65,9 @@
                     </form:SimpleForm>
                     <HBox class="sapUiMediumMarginTop">
                         <Button text="Back" type="Transparent" press=".onLeaverBackToUserInfo" icon="sap-icon://navigation-left-arrow" class="sapUiTinyMarginEnd"/>
-                        <Button text="Save" type="Transparent" press=".onSaveDraft" icon="sap-icon://save" class="sapUiTinyMarginEnd"
-                            enabled="{= !${review>/submission/busy} &amp;&amp; !${review>/submission/timedOut} &amp;&amp; !${review>/sod/checking} &amp;&amp; !${review>/saveBusy} }"/>
+                        <Button text="Save" type="Transparent" press=".onSaveDraft" icon="sap-icon://save" class="sapUiTinyMarginEnd"/>
                         <Button text="Submit for Approval" type="Emphasized" press=".onSubmitApproval" icon="sap-icon://paper-plane"
-                                enabled="{= !${review>/submission/busy} &amp;&amp; !${review>/submission/timedOut} &amp;&amp; !${review>/sod/checking} &amp;&amp; !${review>/saveBusy} }"/>
+                                enabled="{= !${review>/submission/busy} &amp;&amp; !${review>/submission/timedOut} }"/>
                     </HBox>
                 </VBox>
             </VBox>
@@ -124,7 +123,7 @@
                     </form:SimpleForm>
                 </WizardStep>
 
-                <WizardStep id="RoleStep" title="Select Roles">
+                <WizardStep id="RoleStep" title="Select Roles" activate=".onRoleStepActivate">
                     <Table id="roleTable" items="{review>/roles}">
                         <headerToolbar>
                             <OverflowToolbar>
@@ -176,7 +175,7 @@
                                 <ToolbarSpacer/>
                                 <Button text="{= ${review>/sod/checking} ? 'Checking SoD...' : 'Check SoD' }"
                                         icon="sap-icon://shield" press=".onCheckSod"
-                                        enabled="{= !${review>/sod/checking} &amp;&amp; !${review>/submission/busy} &amp;&amp; !${review>/submission/timedOut} &amp;&amp; !${review>/saveBusy} }"/>
+                                        enabled="{= !${review>/sod/checking} }"/>
                             </OverflowToolbar>
                         </headerToolbar>
                     </Panel>
@@ -250,10 +249,9 @@
                         </Table>
                     </Panel>
                     <HBox class="sapUiMediumMarginTop">
-                        <Button text="Save" type="Transparent" press=".onSaveDraft" icon="sap-icon://save" class="sapUiTinyMarginEnd"
-                            enabled="{= !${review>/submission/busy} &amp;&amp; !${review>/submission/timedOut} &amp;&amp; !${review>/sod/checking} &amp;&amp; !${review>/saveBusy} }"/>
+                        <Button text="Save" type="Transparent" press=".onSaveDraft" icon="sap-icon://save" class="sapUiTinyMarginEnd"/>
                         <Button text="Submit for Approval" type="Emphasized" press=".onSubmitApproval" icon="sap-icon://paper-plane"
-                            enabled="{= !${review>/submission/busy} &amp;&amp; !${review>/submission/timedOut} &amp;&amp; !${review>/sod/checking} &amp;&amp; !${review>/saveBusy} }"/>
+                            enabled="{= !${review>/submission/busy} &amp;&amp; !${review>/submission/timedOut} }"/>
                     </HBox>
                 </WizardStep>
             </Wizard>

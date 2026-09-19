@@ -25,9 +25,6 @@ CLASS lhc_Request DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS getApprovalRationale FOR MODIFY
       IMPORTING keys FOR ACTION Request~getApprovalRationale RESULT result.
 
-    METHODS getCapabilities FOR MODIFY
-      IMPORTING keys FOR ACTION Request~getCapabilities RESULT result.
-
     METHODS reject FOR MODIFY
       IMPORTING keys FOR ACTION Request~reject RESULT result.
 
@@ -46,8 +43,12 @@ CLASS lhc_Request DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS validateJoiner FOR VALIDATE ON SAVE
       IMPORTING keys FOR Request~validateJoiner.
 
-    METHODS validateFirefighter FOR VALIDATE ON SAVE
-      IMPORTING keys FOR Request~validateFirefighter.
+    "Update the SAP user address department for a Mover request.
+    "The BAPI is dispatched in a separate task because direct user-master
+    "updates are not allowed in the RAP LUW.
+    METHODS updateUserDepartment
+      IMPORTING iv_username TYPE xubname
+                iv_department TYPE ad_dprtmnt.
 
 *    METHODS validateUser FOR VALIDATE ON SAVE
 *      IMPORTING keys FOR Request~validateUser.
@@ -57,40 +58,6 @@ ENDCLASS.
 CLASS lhc_Request IMPLEMENTATION.
 
   METHOD get_instance_authorizations.
-    READ ENTITIES OF zi_iam_lreq_hdr IN LOCAL MODE
-      ENTITY Request
-        FIELDS ( Status ) WITH CORRESPONDING #( keys )
-      RESULT DATA(lt_requests).
-
-    AUTHORITY-CHECK OBJECT 'ZIAM_REQ' ID 'ACTVT' FIELD '02'.
-    DATA(lv_has_change_auth) = xsdbool( sy-subrc = 0 ).
-
-    AUTHORITY-CHECK OBJECT 'ZIAM_REQ' ID 'ACTVT' FIELD '06'.
-    DATA(lv_has_delete_auth) = xsdbool( sy-subrc = 0 ).
-
-    DATA ls_result LIKE LINE OF result.
-    LOOP AT lt_requests INTO DATA(ls_request).
-      CLEAR ls_result.
-      ls_result-%tky = ls_request-%tky.
-
-      IF requested_authorizations-%update = if_abap_behv=>mk-on.
-        ls_result-%update = COND #(
-          WHEN lv_has_change_auth = abap_true
-           AND ls_request-Status = '01'
-          THEN if_abap_behv=>auth-allowed
-          ELSE if_abap_behv=>auth-unauthorized ).
-      ENDIF.
-
-      IF requested_authorizations-%delete = if_abap_behv=>mk-on.
-        ls_result-%delete = COND #(
-          WHEN lv_has_delete_auth = abap_true
-           AND ls_request-Status = '01'
-          THEN if_abap_behv=>auth-allowed
-          ELSE if_abap_behv=>auth-unauthorized ).
-      ENDIF.
-
-      APPEND ls_result TO result.
-    ENDLOOP.
   ENDMETHOD.
 
   METHOD get_global_authorizations.
@@ -121,78 +88,51 @@ CLASS lhc_Request IMPLEMENTATION.
       ENDIF.
     ENDIF.
   ENDMETHOD.
-
-  METHOD getCapabilities.
-    AUTHORITY-CHECK OBJECT 'ZIAM_REQ' ID 'ACTVT' FIELD '01'.
-    DATA(lv_can_create) = xsdbool( sy-subrc = 0 ).
-
-    result = VALUE #( FOR key IN keys
-      ( %cid = key-%cid
-        %param-CanCreate = lv_can_create ) ).
-  ENDMETHOD.
-
   METHOD get_instance_features.
     READ ENTITIES OF zi_iam_lreq_hdr IN LOCAL MODE
       ENTITY Request
         FIELDS ( Status ) WITH CORRESPONDING #( keys )
       RESULT DATA(lt_requests).
-
-    AUTHORITY-CHECK OBJECT 'ZIAM_REQ' ID 'ACTVT' FIELD '02'.
-    DATA(lv_has_change_auth) = xsdbool( sy-subrc = 0 ).
-
-    AUTHORITY-CHECK OBJECT 'ZIAM_REQ' ID 'ACTVT' FIELD '06'.
-    DATA(lv_has_delete_auth) = xsdbool( sy-subrc = 0 ).
-
     AUTHORITY-CHECK OBJECT 'ZIAM_REQ' ID 'ACTVT' FIELD '43'.
-    DATA(lv_has_approve_auth) = xsdbool( sy-subrc = 0 ).
+    DATA(lv_has_approve_auth) = abap_true.
+    IF sy-subrc <> 0.
+      lv_has_approve_auth = abap_false.
+    ENDIF.
 
-    " Delete chỉ được phép ở Draft; Approve/Reject chỉ được phép ở Submitted.
-    result = VALUE #( FOR ls_request IN lt_requests
-                      ( %tky = ls_request-%tky
-                        %update = COND #(
-                          WHEN ls_request-Status = '01'
-                           AND lv_has_change_auth = abap_true
-                          THEN if_abap_behv=>fc-o-enabled
-                          ELSE if_abap_behv=>fc-o-disabled )
-                        %delete = COND #(
-                          WHEN ls_request-Status = '01'
-                           AND lv_has_delete_auth = abap_true
-                          THEN if_abap_behv=>fc-o-enabled
-                          ELSE if_abap_behv=>fc-o-disabled )
-                        %action-submitForApproval = COND #(
-                          WHEN ls_request-Status = '01'
-                           AND lv_has_change_auth = abap_true
-                          THEN if_abap_behv=>fc-o-enabled
-                          ELSE if_abap_behv=>fc-o-disabled )
+      " Nếu user không có quyền duyệt, thì Approve/Reject chỉ hiện khi Status = 02 nhưng vẫn bị disable
+      result = VALUE #( FOR ls_request IN lt_requests
+                        ( %tky = ls_request-%tky
+                          %update                   = COND #( WHEN ls_request-Status = '01'  THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
+                          %delete                   = COND #( WHEN ls_request-Status = '01' OR ls_request-Status = '02' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
+                          %action-submitForApproval = COND #( WHEN ls_request-Status = '01' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
 
-                        %action-approve = COND #(
-                          WHEN ls_request-Status = '02'
-                           AND lv_has_approve_auth = abap_true
-                          THEN if_abap_behv=>fc-o-enabled
-                          ELSE if_abap_behv=>fc-o-disabled )
-                        %action-reject = COND #(
-                          WHEN ls_request-Status = '02'
-                           AND lv_has_approve_auth = abap_true
-                          THEN if_abap_behv=>fc-o-enabled
-                          ELSE if_abap_behv=>fc-o-disabled )
-                      ) ).
+                          " Nút Approve/Reject sẽ BỊ ẨN nếu Status != 02 HOẶC User KHÔNG có quyền 43
+                          %action-approve           = COND #( WHEN ls_request-Status = '02' AND lv_has_approve_auth = abap_true THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
+                          %action-reject            = COND #( WHEN ls_request-Status = '02' AND lv_has_approve_auth = abap_true THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
+                        ) ).
   ENDMETHOD.
+
+*  METHOD get_instance_features.
+*    READ ENTITIES OF zi_iam_lreq_hdr IN LOCAL MODE
+*      ENTITY Request
+*        FIELDS ( Status ) WITH CORRESPONDING #( keys )
+*      RESULT DATA(lt_requests).
+*
+*    result = VALUE #( FOR ls_request IN lt_requests
+*                      ( %tky = ls_request-%tky
+*                        " Khóa Edit/Delete nếu không phải Draft (01)
+*                        %update                   = COND #( WHEN ls_request-Status = '01' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
+*                        %delete                   = COND #( WHEN ls_request-Status = '01' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
+*                        " Nút Submit chỉ hiện khi Draft
+*                        %action-submitForApproval = COND #( WHEN ls_request-Status = '01' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
+*                        " Nút Approve/Reject chỉ hiện khi Submitted (02)
+*                        %action-approve           = COND #( WHEN ls_request-Status = '02' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
+*                        %action-reject            = COND #( WHEN ls_request-Status = '02' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
+*                      ) ).
+*  ENDMETHOD.
 
 
   METHOD approve.
-    AUTHORITY-CHECK OBJECT 'ZIAM_REQ' ID 'ACTVT' FIELD '43'.
-    IF sy-subrc <> 0.
-      LOOP AT keys INTO DATA(ls_unauthorized_key).
-        APPEND VALUE #( %tky = ls_unauthorized_key-%tky ) TO failed-request.
-        APPEND VALUE #( %tky = ls_unauthorized_key-%tky
-          %msg = new_message_with_text(
-            severity = if_abap_behv_message=>severity-error
-            text = 'You are not authorized to approve or reject requests.' ) )
-          TO reported-request.
-      ENDLOOP.
-      RETURN.
-    ENDIF.
-
     READ ENTITIES OF zi_iam_lreq_hdr IN LOCAL MODE
       ENTITY Request
         ALL FIELDS WITH CORRESPONDING #( keys )
@@ -202,27 +142,8 @@ CLASS lhc_Request IMPLEMENTATION.
       RESULT DATA(lt_req_roles).
 
     LOOP AT lt_requests INTO DATA(ls_request).
-      IF ls_request-Status <> '02'.
-        APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
-        APPEND VALUE #( %tky = ls_request-%tky
-          %msg = new_message_with_text(
-            severity = if_abap_behv_message=>severity-error
-            text = 'Only Submitted requests can be approved.' ) )
-          TO reported-request.
-        CONTINUE.
-      ENDIF.
-
-      READ TABLE keys ASSIGNING FIELD-SYMBOL(<ls_key>) WITH KEY %tky = ls_request-%tky.
-      IF sy-subrc <> 0.
-        APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
-        APPEND VALUE #( %tky = ls_request-%tky
-          %msg = new_message_with_text(
-            severity = if_abap_behv_message=>severity-error
-            text = 'Approval parameters were not provided.' ) )
-          TO reported-request.
-        CONTINUE.
-      ENDIF.
-
+      READ TABLE keys ASSIGNING FIELD-SYMBOL(<ls_key>)
+        WITH KEY %tky = ls_request-%tky.
       DATA(lt_requested_roles) = VALUE zcl_iam_sod_request_checker=>tt_role(
         FOR ls_requested_role IN lt_req_roles WHERE ( ReqUuid = ls_request-ReqUuid )
         ( agr_name = ls_requested_role-RoleName ) ).
@@ -238,8 +159,10 @@ CLASS lhc_Request IMPLEMENTATION.
       IF lv_risk_score = 3 AND <ls_key>-%param-ApprovalReason IS INITIAL.
         APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
         APPEND VALUE #( %tky = ls_request-%tky
-          %msg = new_message_with_text( severity = if_abap_behv_message=>severity-error
-            text = 'Approval rationale is required for Critical SoD.' ) ) TO reported-request.
+          %msg = new_message(
+            id       = 'ZMSG_IAM07'
+            number   = '100'
+            severity = if_abap_behv_message=>severity-error ) ) TO reported-request.
         CONTINUE.
       ENDIF.
       DATA: lt_bapi_roles TYPE STANDARD TABLE OF bapiagr.
@@ -270,6 +193,12 @@ CLASS lhc_Request IMPLEMENTATION.
           ENDIF.
 
         WHEN 'M'. " Mover
+          IF ls_request-Department IS NOT INITIAL.
+            updateUserDepartment(
+              iv_username   = ls_request-TargetUser
+              iv_department = ls_request-Department ).
+            WAIT UP TO 1 SECONDS.
+          ENDIF.
           IF lt_bapi_roles IS NOT INITIAL.
             zcl_iam_bapi_wrapper=>assign_roles( iv_username = ls_request-TargetUser it_roles = lt_bapi_roles ).
           ENDIF.
@@ -294,7 +223,11 @@ CLASS lhc_Request IMPLEMENTATION.
           IF ls_grant-ok = abap_false.
             APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
             APPEND VALUE #( %tky = ls_request-%tky
-              %msg = new_message_with_text( severity = if_abap_behv_message=>severity-error text = ls_grant-message ) ) TO reported-request.
+              %msg = new_message(
+                id       = 'ZMSG_IAM07'
+                number   = '001'
+                severity = if_abap_behv_message=>severity-error
+                v1       = ls_grant-message ) ) TO reported-request.
             CONTINUE.
           ENDIF.
       ENDCASE.
@@ -320,116 +253,44 @@ CLASS lhc_Request IMPLEMENTATION.
       ENDIF.
     ENDLOOP.
 
-    READ ENTITIES OF zi_iam_lreq_hdr IN LOCAL MODE
-      ENTITY Request
-        ALL FIELDS WITH CORRESPONDING #( keys )
-      RESULT DATA(lt_approved_requests).
+    result = VALUE #( FOR req IN lt_requests ( %tky = req-%tky %param = req ) ).
+  ENDMETHOD.
 
-    result = VALUE #( FOR req IN lt_approved_requests ( %tky = req-%tky %param = req ) ).
+  METHOD updateUserDepartment.
+    DATA: ls_address  TYPE bapiaddr3,
+          ls_addressx TYPE bapiaddr3x.
+
+    ls_address-department  = iv_department.
+    ls_addressx-department = abap_true.
+
+    CALL FUNCTION 'BAPI_USER_CHANGE' STARTING NEW TASK 'BAPI_USER_CHANGE_DEPT'
+      EXPORTING
+        username = iv_username
+        address  = ls_address
+        addressx = ls_addressx.
   ENDMETHOD.
 
   METHOD reject.
-    AUTHORITY-CHECK OBJECT 'ZIAM_REQ' ID 'ACTVT' FIELD '43'.
-    IF sy-subrc <> 0.
-      LOOP AT keys INTO DATA(ls_unauthorized_key).
-        APPEND VALUE #( %tky = ls_unauthorized_key-%tky ) TO failed-request.
-        APPEND VALUE #( %tky = ls_unauthorized_key-%tky
-          %msg = new_message_with_text(
-            severity = if_abap_behv_message=>severity-error
-            text = 'You are not authorized to approve or reject requests.' ) )
-          TO reported-request.
-      ENDLOOP.
-      RETURN.
-    ENDIF.
-
-    READ ENTITIES OF zi_iam_lreq_hdr IN LOCAL MODE
+    MODIFY ENTITIES OF zi_iam_lreq_hdr IN LOCAL MODE
       ENTITY Request
-        FIELDS ( Status ) WITH CORRESPONDING #( keys )
-      RESULT DATA(lt_requests).
-
-    LOOP AT lt_requests INTO DATA(ls_request).
-      IF ls_request-Status <> '02'.
-        APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
-        APPEND VALUE #( %tky = ls_request-%tky
-          %msg = new_message_with_text(
-            severity = if_abap_behv_message=>severity-error
-            text = 'Only Submitted requests can be rejected.' ) )
-          TO reported-request.
-        CONTINUE.
-      ENDIF.
-
-      MODIFY ENTITIES OF zi_iam_lreq_hdr IN LOCAL MODE
-        ENTITY Request
-          UPDATE
-          FIELDS ( Status )
-          WITH VALUE #( ( %tky = ls_request-%tky Status = '04' ) ).
-    ENDLOOP.
+        UPDATE
+        FIELDS ( Status )
+        WITH VALUE #( FOR key IN keys ( %tky = key-%tky Status = '04' ) ).
 
     READ ENTITIES OF zi_iam_lreq_hdr IN LOCAL MODE
       ENTITY Request
         ALL FIELDS WITH CORRESPONDING #( keys )
-      RESULT DATA(lt_rejected_requests).
-    result = VALUE #( FOR req IN lt_rejected_requests ( %tky = req-%tky %param = req ) ).
+      RESULT DATA(lt_requests).
+    result = VALUE #( FOR req IN lt_requests ( %tky = req-%tky %param = req ) ).
   ENDMETHOD.
 
   METHOD submitForApproval.
-    AUTHORITY-CHECK OBJECT 'ZIAM_REQ' ID 'ACTVT' FIELD '02'.
-    IF sy-subrc <> 0.
-      LOOP AT keys INTO DATA(ls_unauthorized_key).
-        APPEND VALUE #( %tky = ls_unauthorized_key-%tky ) TO failed-request.
-        APPEND VALUE #( %tky = ls_unauthorized_key-%tky
-          %msg = new_message_with_text(
-            severity = if_abap_behv_message=>severity-error
-            text = 'You are not authorized to submit requests.' ) )
-          TO reported-request.
-      ENDLOOP.
-      RETURN.
-    ENDIF.
-
     READ ENTITIES OF zi_iam_lreq_hdr IN LOCAL MODE
       ENTITY Request ALL FIELDS WITH CORRESPONDING #( keys )
       RESULT DATA(lt_requests)
       ENTITY Request BY \_Roles ALL FIELDS WITH CORRESPONDING #( keys )
       RESULT DATA(lt_req_roles).
     LOOP AT lt_requests INTO DATA(ls_request).
-      IF ls_request-Status <> '01'.
-        APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
-        APPEND VALUE #( %tky = ls_request-%tky
-          %msg = new_message_with_text(
-            severity = if_abap_behv_message=>severity-error
-            text = 'Only Draft requests can be submitted.' ) )
-          TO reported-request.
-        CONTINUE.
-      ENDIF.
-
-      IF ls_request-ReqType = 'F'.
-        DATA(lt_firefighter_roles) = VALUE #( FOR ls_role IN lt_req_roles
-          WHERE ( ReqUuid = ls_request-ReqUuid AND RoleName IS NOT INITIAL ) ( ls_role ) ).
-        IF lines( lt_firefighter_roles ) <> 1.
-          APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
-          APPEND VALUE #( %tky = ls_request-%tky
-            %msg = new_message_with_text(
-              severity = if_abap_behv_message=>severity-error
-              text = 'A Firefighter request must contain exactly one emergency role.' ) )
-            TO reported-request.
-          CONTINUE.
-        ENDIF.
-
-        DATA(ls_firefighter_role) = lt_firefighter_roles[ 1 ].
-        DATA(lv_firefighter_error) = zcl_iam_ff_service=>validate_request(
-          iv_emergency_role = ls_firefighter_role-RoleName
-          iv_duration_hours = CONV i( ls_request-DurationHours ) ).
-        IF lv_firefighter_error IS NOT INITIAL.
-          APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
-          APPEND VALUE #( %tky = ls_request-%tky
-            %msg = new_message_with_text(
-              severity = if_abap_behv_message=>severity-error
-              text = lv_firefighter_error ) )
-            TO reported-request.
-          CONTINUE.
-        ENDIF.
-      ENDIF.
-
       DATA(lt_requested_roles) = VALUE zcl_iam_sod_request_checker=>tt_role(
         FOR ls_requested_role IN lt_req_roles WHERE ( ReqUuid = ls_request-ReqUuid )
         ( agr_name = ls_requested_role-RoleName ) ).
@@ -446,12 +307,7 @@ CLASS lhc_Request IMPLEMENTATION.
         ENTITY Request UPDATE FIELDS ( Status RiskScore )
         WITH VALUE #( ( %tky = ls_request-%tky Status = '02' RiskScore = lv_risk_score ) ).
     ENDLOOP.
-    READ ENTITIES OF zi_iam_lreq_hdr IN LOCAL MODE
-      ENTITY Request
-        ALL FIELDS WITH CORRESPONDING #( keys )
-      RESULT DATA(lt_submitted_requests).
-
-    result = VALUE #( FOR req IN lt_submitted_requests ( %tky = req-%tky %param = req ) ).
+    result = VALUE #( FOR req IN lt_requests ( %tky = req-%tky %param = req ) ).
   ENDMETHOD.
 
   METHOD checkSod.
@@ -550,14 +406,15 @@ CLASS lhc_Request IMPLEMENTATION.
       ENDIF.
 
       DATA(lv_email) = CONV string( ls_request-Email ).
-      FIND REGEX '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+      FIND PCRE '^[^\s@]+@[^\s@]+\.[^\s@]+$'
         IN lv_email MATCH COUNT DATA(lv_email_match_count).
       IF lv_email_match_count = 0.
         APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
         APPEND VALUE #( %tky = ls_request-%tky
-                        %msg = new_message_with_text(
-                          severity = if_abap_behv_message=>severity-error
-                          text = 'Enter a valid e-mail address for a Joiner request.' ) )
+                        %msg = new_message(
+                          id       = 'ZMSG_IAM07'
+                          number   = '101'
+                          severity = if_abap_behv_message=>severity-error ) )
                       TO reported-request.
       ENDIF.
     ENDLOOP.
@@ -576,9 +433,10 @@ CLASS lhc_Request IMPLEMENTATION.
       IF ls_request-ReqType = 'M' AND ls_request-Department IS INITIAL.
         APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
         APPEND VALUE #( %tky = ls_request-%tky
-                        %msg = new_message_with_text(
-                          severity = if_abap_behv_message=>severity-error
-                          text = 'New department is required for a Mover request.' ) )
+                        %msg = new_message(
+                          id       = 'ZMSG_IAM07'
+                          number   = '102'
+                          severity = if_abap_behv_message=>severity-error ) )
                       TO reported-request.
         CONTINUE.
       ENDIF.
@@ -594,9 +452,11 @@ CLASS lhc_Request IMPLEMENTATION.
       IF sy-subrc <> 0.
         APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
         APPEND VALUE #( %tky = ls_request-%tky
-                        %msg = new_message_with_text(
+                        %msg = new_message(
+                          id       = 'ZMSG_IAM07'
+                          number   = '103'
                           severity = if_abap_behv_message=>severity-error
-                          text = |Department { ls_request-Department } does not exist or is not active.| ) )
+                          v1       = ls_request-Department ) )
                       TO reported-request.
       ENDIF.
     ENDLOOP.
@@ -619,9 +479,11 @@ CLASS lhc_Request IMPLEMENTATION.
       IF sy-subrc = 0.
         APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
         APPEND VALUE #( %tky = ls_request-%tky
-                        %msg = new_message_with_text(
+                        %msg = new_message(
+                          id       = 'ZMSG_IAM07'
+                          number   = '104'
                           severity = if_abap_behv_message=>severity-error
-                          text = |SAP user { ls_request-TargetUser } already exists. Use a Mover request instead.| ) )
+                          v1       = ls_request-TargetUser ) )
                       TO reported-request.
         CONTINUE.
       ENDIF.
@@ -636,51 +498,13 @@ CLASS lhc_Request IMPLEMENTATION.
       IF sy-subrc = 0.
         APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
         APPEND VALUE #( %tky = ls_request-%tky
-                        %msg = new_message_with_text(
+                        %msg = new_message(
+                          id       = 'ZMSG_IAM07'
+                          number   = '105'
                           severity = if_abap_behv_message=>severity-error
-                          text = |Joiner request { lv_duplicate_req_id } already exists for SAP user { ls_request-TargetUser }.| ) )
+                          v1       = lv_duplicate_req_id
+                          v2       = ls_request-TargetUser ) )
                       TO reported-request.
-      ENDIF.
-    ENDLOOP.
-  ENDMETHOD.
-
-  METHOD validateFirefighter.
-    READ ENTITIES OF zi_iam_lreq_hdr IN LOCAL MODE
-      ENTITY Request
-        FIELDS ( ReqUuid ReqType DurationHours ) WITH CORRESPONDING #( keys )
-      RESULT DATA(lt_requests)
-      ENTITY Request BY \_Roles
-        ALL FIELDS WITH CORRESPONDING #( keys )
-      RESULT DATA(lt_request_roles).
-
-    LOOP AT lt_requests INTO DATA(ls_request).
-      IF ls_request-ReqType <> 'F'.
-        CONTINUE.
-      ENDIF.
-
-      DATA(lt_firefighter_roles) = VALUE #( FOR ls_role IN lt_request_roles
-        WHERE ( ReqUuid = ls_request-ReqUuid AND RoleName IS NOT INITIAL ) ( ls_role ) ).
-      IF lines( lt_firefighter_roles ) <> 1.
-        APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
-        APPEND VALUE #( %tky = ls_request-%tky
-          %msg = new_message_with_text(
-            severity = if_abap_behv_message=>severity-error
-            text = 'A Firefighter request must contain exactly one emergency role.' ) )
-          TO reported-request.
-        CONTINUE.
-      ENDIF.
-
-      DATA(ls_firefighter_role) = lt_firefighter_roles[ 1 ].
-      DATA(lv_firefighter_error) = zcl_iam_ff_service=>validate_request(
-        iv_emergency_role = ls_firefighter_role-RoleName
-        iv_duration_hours = CONV i( ls_request-DurationHours ) ).
-      IF lv_firefighter_error IS NOT INITIAL.
-        APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
-        APPEND VALUE #( %tky = ls_request-%tky
-          %msg = new_message_with_text(
-            severity = if_abap_behv_message=>severity-error
-            text = lv_firefighter_error ) )
-          TO reported-request.
       ENDIF.
     ENDLOOP.
   ENDMETHOD.
@@ -697,7 +521,7 @@ CLASS lhc_Request IMPLEMENTATION.
 *        IF sy-subrc = 0.
 *          APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
 *          APPEND VALUE #( %tky = ls_request-%tky
-*                          %msg = new_message_with_text( severity = if_abap_behv_message=>severity-error text = |User { ls_request-TargetUser } already exists in SAP!| )
+*                          Obsolete: active duplicate validation is implemented in validateJoiner.
 *                        ) TO reported-request.
 *        ENDIF.
 *      ENDIF.

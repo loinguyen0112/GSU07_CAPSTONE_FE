@@ -13,24 +13,16 @@ import DateFormat from "sap/ui/core/format/DateFormat";
 import Dialog from "sap/m/Dialog";
 import TextArea from "sap/m/TextArea";
 import Button from "sap/m/Button";
-import EventBus from "sap/ui/core/EventBus";
 
 /**
- * @namespace hrrequest.hrm.controller
+ * @namespace ziam.dashboard.controller
  */
 export default class RequestDetail extends Controller {
     private readonly ACTION_NAMESPACE = "com.sap.gateway.srvd.zsd_iam_lifecycle.v0001";
-    private readonly FIREFIGHTER_ROLE_VH_URL = "/sap/opu/odata4/sap/zui_iam_lifecycle_o4/srvd/sap/zsd_iam_lifecycle/0001/FirefighterRole";
     private readonly CHANGE_GROUP_ID = "iamChanges";
     private _sReqUuid = "";
-    private _eventBus!: EventBus;
-
-    private _notifyRequestChanged(): void {
-        this._eventBus.publish("hrm", "requestChanged", { ReqUuid: this._sReqUuid });
-    }
 
     public onInit(): void {
-        this._eventBus = (this.getOwnerComponent() as UIComponent).getEventBus();
         this.getView()?.setModel(new JSONModel({
             isEditing: false,
             canEdit: false,
@@ -65,11 +57,6 @@ export default class RequestDetail extends Controller {
     private _bindRequest(bIsActiveEntity: boolean): void {
         const oView = this.getView();
         if (oView) {
-            // Always start a fresh element binding. This is important when the
-            // same list item is opened again after the detail view was closed;
-            // otherwise UI5 can keep the previous context without requesting
-            // the detail data a second time.
-            (oView as unknown as { unbindElement: () => void }).unbindElement();
             oView.bindElement({
                 path: `/Request(ReqUuid=${this._sReqUuid},IsActiveEntity=${bIsActiveEntity})`,
                 parameters: {
@@ -200,22 +187,16 @@ export default class RequestDetail extends Controller {
         BusyIndicator.show(0);
         try {
             const oModel = oContext.getModel() as ODataModel;
-            // Save persists the current draft only. Prepare/Activate is part
-            // of Submit for Approval. Running those draft actions here also
-            // makes an ordinary edit send an invalid DurationHours value
-            // (empty text for non-Firefighter requests) and can leave RAP
-            // waiting while a child role is still being updated.
-            // Two-way OData bindings already queue edited fields in the
-            // application update group; do not rewrite every control value.
-            const sFirefighterError = await this._validateFirefighterEdit();
-            if (sFirefighterError) {
-                MessageBox.error(sFirefighterError, { title: "Invalid Firefighter duration" });
-                return;
-            }
+            // Save only persists the current draft.  Prepare/Activate belongs
+            // to Submit for Approval; running both draft actions here made an
+            // edit of a transient child role wait indefinitely in RAP.  The
+            // OData controls are two-way bound, so all changed properties are
+            // already queued in iamChanges; writing every form field again
+            // here can deadlock the transient child create.
             await oModel.submitBatch(this.CHANGE_GROUP_ID);
             this._setEditing(false);
-            this._notifyRequestChanged();
-            // Keep the draft binding after Save. Submit will perform
+            // Keep the draft binding so the user can immediately see the
+            // saved role changes.  The existing Submit action performs
             // Prepare/Activate before sending the request for approval.
             this._bindRequest(false);
             MessageToast.show("Draft changes saved successfully.");
@@ -241,7 +222,6 @@ export default class RequestDetail extends Controller {
             await oModel.submitBatch(this.CHANGE_GROUP_ID);
             await oDiscardPromise;
             this._setEditing(false);
-            this._notifyRequestChanged();
             this._bindRequest(true);
             MessageToast.show("Changes discarded.");
         } catch (err: any) {
@@ -254,6 +234,43 @@ export default class RequestDetail extends Controller {
     public onDeleteRolePress(oEvent: Event): void {
         const oRoleContext = (oEvent.getSource() as any).getBindingContext() as Context;
         oRoleContext?.delete().catch((err: Error) => MessageToast.show("Delete Role Error: " + err.message));
+    }
+
+    public async onAddRolePress(): Promise<void> {
+        const oContext = this.getView()?.getBindingContext() as Context;
+        if (!oContext) return;
+
+        try {
+            const sReqType = String(await this._requestProperty(oContext, "ReqType") || "J");
+            const oRolesBinding = (this.byId("rolesTable") as any)?.getBinding("items");
+            if (!oRolesBinding) {
+                throw new Error("The requested-role table is not ready yet.");
+            }
+            const aExisting = await oRolesBinding.requestContexts(0, 100);
+            if (sReqType === "F" && aExisting.length > 0) {
+                MessageBox.warning("A Firefighter request can contain exactly one emergency role.");
+                return;
+            }
+            // Bind the child collection explicitly to the same application
+            // update group as the draft header.  A table binding created by
+            // XML may otherwise inherit $auto, so the transient role create
+            // is not flushed by Save's iamChanges batch.
+            const sRolesPath = `${oContext.getPath()}/_Roles`;
+            const oWriteBinding = oContext.getModel().bindList(
+                sRolesPath,
+                undefined,
+                undefined,
+                undefined,
+                { $$updateGroupId: this.CHANGE_GROUP_ID }
+            ) as any;
+            oWriteBinding.create({ RoleName: "", ValidFrom: null, ValidTo: null }, true);
+            MessageToast.show("Role row added. Enter the role and save the draft.");
+        } catch (err: any) {
+            MessageBox.error("Unable to add role: " + this._getODataErrorMessage(err), {
+                title: "Add Role Failed",
+                details: err?.message || ""
+            });
+        }
     }
 
     private _syncDraftFromControls(oContext: Context): void {
@@ -273,8 +290,9 @@ export default class RequestDetail extends Controller {
             Email: (this.byId("editEmailInput") as any)?.getValue?.() || "",
             TicketId: (this.byId("editTicketIdInput") as any)?.getValue?.() || "",
             Reason: (this.byId("editReasonInput") as any)?.getValue?.() || "",
-            // duration_hours is ABAP INT1 / OData Edm.Byte. Never send an
-            // empty string for non-Firefighter requests.
+            // DurationHours is Edm.Byte.  Non-Firefighter requests must send
+            // a numeric zero; an empty string produces an invalid OData
+            // payload and is parsed by Gateway as an XML-stream error.
             DurationHours: sReqType === "F" && Number.isInteger(iDuration) ? iDuration : 0
         };
 
@@ -283,7 +301,7 @@ export default class RequestDetail extends Controller {
         });
 
         const oRolesTable = this.byId("rolesTable") as any;
-        (oRolesTable?.getItems?.() || []).forEach((oItem: any) => {
+        const aRoleUpdates = (oRolesTable?.getItems?.() || []).flatMap((oItem: any) => {
             const oRoleContext = oItem.getBindingContext() as Context;
             const aCells = oItem.getCells();
             const sRoleName = aCells[0]?.getItems?.()[1]?.getValue?.() || "";
@@ -291,6 +309,9 @@ export default class RequestDetail extends Controller {
             const sValidTo = this._getDateValue(aCells[2]?.getItems?.()[1]);
 
             this._queueProperty(oRoleContext, "RoleName", sRoleName);
+            // Do not convert an unfilled DatePicker into an explicit null.
+            // Existing role dates remain unchanged; a genuinely entered date
+            // is normalized to the OData Edm.Date format.
             if (sValidFrom) {
                 this._queueProperty(oRoleContext, "ValidFrom", sValidFrom);
             }
@@ -316,92 +337,26 @@ export default class RequestDetail extends Controller {
         return oDatePicker?.getValue?.() || "";
     }
 
-    /**
-     * Detail editing must apply the same allowlist max as the create wizard.
-     * This is a UX check only; RAP Prepare/submit validation remains the
-     * authoritative server-side check.
-     */
-    private async _validateFirefighterEdit(): Promise<string | undefined> {
-        const sReqType = (this.byId("editReqTypeSelect") as any)?.getSelectedKey?.() || "J";
-        if (sReqType !== "F") {
-            return undefined;
-        }
-
-        const sDuration = String((this.byId("editDurationHoursInput") as any)?.getValue?.() || "").trim();
-        const iDuration = Number(sDuration);
-        if (!/^(?:[1-9]|1\d|2[0-4])$/.test(sDuration)) {
-            return "Duration must be an integer from 1 to 24 hours.";
-        }
-
-        const oRolesTable = this.byId("rolesTable") as any;
-        const aRoleNames = (oRolesTable?.getItems?.() || [])
-            .map((oItem: any) => {
-                const oRoleCell = oItem.getCells?.()[0];
-                return String(oRoleCell?.getItems?.()[1]?.getValue?.()
-                    || oRoleCell?.getItems?.()[0]?.getText?.() || "").trim();
-            })
-            .filter(Boolean);
-        if (aRoleNames.length !== 1) {
-            return "A Firefighter request must contain exactly one emergency role.";
-        }
-
-        const sRoleName = aRoleNames[0].replace(/'/g, "''");
-        const sFilter = encodeURIComponent(`RoleName eq '${sRoleName}'`);
-        const oResponse = await fetch(
-            `${this.FIREFIGHTER_ROLE_VH_URL}?$top=1&$filter=${sFilter}&$format=json`,
-            { credentials: "include", headers: { Accept: "application/json" } }
-        );
-        if (!oResponse.ok) {
-            throw new Error(`Unable to load Firefighter role configuration (HTTP ${oResponse.status}).`);
-        }
-        const oData = await oResponse.json() as { value?: Array<{ MaxHours?: unknown }> };
-        const oRole = oData.value?.[0];
-        if (!oRole) {
-            return "The selected emergency role is not active in the Firefighter allowlist.";
-        }
-
-        const iMaxHours = Number(oRole.MaxHours || 0);
-        if (iMaxHours > 0 && iDuration > iMaxHours) {
-            return `Duration exceeds the configured maximum of ${iMaxHours} hour(s) for role ${aRoleNames[0]}.`;
-        }
-        return undefined;
-    }
-
     public onDeletePress(): void {
         const oContext = this.getView()?.getBindingContext() as Context;
         if (!oContext) return;
 
         oContext.delete().then(() => {
             MessageToast.show("Deleted successfully!");
-            this._notifyRequestChanged();
             this.onCloseDetail();
         }).catch((err: Error) => MessageToast.show("Delete Error: " + err.message));
     }
 
-    public async onSubmitPress(): Promise<void> {
+    public onSubmitPress(): void {
         const oContext = this.getView()?.getBindingContext() as Context;
         if (!oContext) return;
 
-        try {
-            const oModel = oContext.getModel() as ODataModel;
-            const bIsActiveEntity = await (oContext as any).requestProperty("IsActiveEntity");
-            if (bIsActiveEntity === false) {
-                // Run draft validations before the submit action. This closes
-                // the path where an edited draft bypassed Step 1 validation.
-                const oPrepareAction = oModel.bindContext(`${this.ACTION_NAMESPACE}.Prepare(...)`, oContext) as any;
-                const oPreparePromise = oPrepareAction.execute(this.CHANGE_GROUP_ID);
-                await Promise.all([oModel.submitBatch(this.CHANGE_GROUP_ID), oPreparePromise]);
-            }
-
-            const oAction = oModel.bindContext(`${this.ACTION_NAMESPACE}.submitForApproval(...)`, oContext) as any;
-            await oAction.execute();
+        const oAction = oContext.getModel().bindContext(`${this.ACTION_NAMESPACE}.submitForApproval(...)`, oContext) as any;
+        oAction.execute().then(() => {
             MessageToast.show("Submitted successfully!");
-            this._notifyRequestChanged();
             oContext.refresh();
             setTimeout(() => this._updateDetailState(), 500);
-        } catch (err: any) {
-            MessageToast.show("Submit Error: " + this._getODataErrorMessage(err));
-        }
+        }).catch((err: Error) => MessageToast.show("Submit Error: " + err.message));
     }
 
     public async onApprovePress(): Promise<void> {
@@ -417,7 +372,6 @@ export default class RequestDetail extends Controller {
             }
             await this._executeApprove(oContext, sApprovalReason);
             MessageToast.show("Approved successfully!");
-            this._notifyRequestChanged();
             oContext.refresh();
             setTimeout(() => this._updateDetailState(), 500);
         } catch (err: any) {
@@ -428,7 +382,6 @@ export default class RequestDetail extends Controller {
                     try {
                         await this._executeApprove(oContext, sRetryReason);
                         MessageToast.show("Approved successfully!");
-                        this._notifyRequestChanged();
                         oContext.refresh();
                         setTimeout(() => this._updateDetailState(), 500);
                         return;
@@ -449,7 +402,6 @@ export default class RequestDetail extends Controller {
         const oAction = oContext.getModel().bindContext(`${this.ACTION_NAMESPACE}.reject(...)`, oContext) as any;
         oAction.execute().then(() => {
             MessageToast.show("Rejected successfully!");
-            this._notifyRequestChanged();
             oContext.refresh();
             setTimeout(() => this._updateDetailState(), 500);
         }).catch((err: Error) => MessageToast.show("Reject Error: " + err.message));

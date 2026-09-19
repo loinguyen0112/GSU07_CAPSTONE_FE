@@ -71,12 +71,14 @@ CLASS zcl_iam_sod_admin IMPLEMENTATION.
     AUTHORITY-CHECK OBJECT 'ZIAM_REQ'
       ID 'ACTVT' FIELD '06'.
     IF sy-subrc <> 0.
-      ev_message = 'Missing authorization ZIAM_REQ ACTVT=06'.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '010'
+        WITH 'ZIAM_REQ' '06' INTO ev_message.
       RETURN.
     ENDIF.
 
     IF iv_reason IS INITIAL.
-      ev_message = 'A review reason is required before removing a role'.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '021'
+        INTO ev_message.
       RETURN.
     ENDIF.
 
@@ -86,25 +88,30 @@ CLASS zcl_iam_sod_admin IMPLEMENTATION.
         AND rule_type = 'R'
       INTO @DATA(ls_rule).
     IF sy-subrc <> 0.
-      ev_message = |SoD rule { iv_rule_id } was not found|.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '300'
+        WITH iv_rule_id INTO ev_message.
       RETURN.
     ENDIF.
     IF iv_role <> ls_rule-conflict_role1
        AND iv_role <> ls_rule-conflict_role2.
-      ev_message = |Role { iv_role } is not part of rule { iv_rule_id }|.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '301'
+        WITH iv_role iv_rule_id INTO ev_message.
       RETURN.
     ENDIF.
 
     GET TIME STAMP FIELD DATA(lv_now).
-    SELECT SINGLE grant_id
+    SELECT grant_id
       FROM ziam_ff_grant
       WHERE target_user = @iv_user
         AND agr_name    = @iv_role
         AND status      = 'ACTIVE'
         AND end_at      > @lv_now
-      INTO @DATA(lv_grant_id).
-    IF sy-subrc = 0.
-      ev_message = |Role { iv_role } belongs to active Firefighter grant { lv_grant_id }; revoke it through the Firefighter expiry/revoke flow|.
+      INTO TABLE @DATA(lt_active_grants).
+    IF lt_active_grants IS NOT INITIAL.
+      SORT lt_active_grants BY grant_id DESCENDING.
+      DATA(lv_grant_id) = lt_active_grants[ 1 ]-grant_id.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '302'
+        WITH iv_role lv_grant_id INTO ev_message.
       RETURN.
     ENDIF.
 
@@ -126,12 +133,14 @@ CLASS zcl_iam_sod_admin IMPLEMENTATION.
     READ TABLE lt_activitygroups ASSIGNING FIELD-SYMBOL(<ls_activitygroup>)
       WITH KEY agr_name = iv_role.
     IF sy-subrc <> 0.
-      ev_message = |Role { iv_role } is not assigned to user { iv_user }|.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '303'
+        WITH iv_role iv_user INTO ev_message.
       RETURN.
     ENDIF.
     IF <ls_activitygroup>-from_dat > sy-datum
        OR <ls_activitygroup>-to_dat < sy-datum.
-      ev_message = |Role { iv_role } is not currently valid for user { iv_user }|.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '304'
+        WITH iv_role iv_user INTO ev_message.
       RETURN.
     ENDIF.
     DELETE lt_activitygroups WHERE agr_name = iv_role.
@@ -153,7 +162,8 @@ CLASS zcl_iam_sod_admin IMPLEMENTATION.
         DATA(lv_log_id) = cl_system_uuid=>create_uuid_c32_static( ).
       CATCH cx_uuid_error.
         CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
-        ev_message = 'Audit UUID creation failed; role removal was rolled back'.
+        MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '027'
+          INTO ev_message.
         RETURN.
     ENDTRY.
 
@@ -169,7 +179,8 @@ CLASS zcl_iam_sod_admin IMPLEMENTATION.
     INSERT ziam_aud_log2 FROM @ls_audit.
     IF sy-subrc <> 0.
       CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
-      ev_message = 'Audit write failed; role removal was rolled back'.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '027'
+        INTO ev_message.
       RETURN.
     ENDIF.
     CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
@@ -177,6 +188,7 @@ CLASS zcl_iam_sod_admin IMPLEMENTATION.
         wait = abap_true.
 
     ev_success = abap_true.
-    ev_message = |Role { iv_role } was removed from { iv_user } and the review was audited|.
+    MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '305'
+      WITH iv_role iv_user INTO ev_message.
   ENDMETHOD.
 ENDCLASS.

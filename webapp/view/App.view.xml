@@ -1,9 +1,24 @@
-<mvc:View controllerName="hrrequest.hrm.controller.App"
+<mvc:View controllerName="ziam.dashboard.controller.App"
     xmlns:mvc="sap.ui.core.mvc" displayBlock="true"
     xmlns:tnt="sap.tnt"
     xmlns:f="sap.f"
     xmlns="sap.m">
     <tnt:ToolPage id="toolPage">
+        <tnt:header>
+            <tnt:ToolHeader>
+                <Button id="toggleSideNavigationButton" icon="sap-icon://menu2" type="Transparent" tooltip="Collapse navigation" press=".onToggleSideNavigation"/>
+                <Title text="IAM Operations" level="H1" class="sapUiTinyMarginBegin"/>
+                <ToolbarSpacer />
+                <Button icon="sap-icon://customer" type="Transparent" />
+            </tnt:ToolHeader>
+        </tnt:header>
+        <tnt:sideContent>
+            <tnt:SideNavigation>
+                <tnt:NavigationList>
+                    <tnt:NavigationListItem text="Operations Dashboard" icon="sap-icon://home" select=".onNavToDashboard" />
+                </tnt:NavigationList>
+            </tnt:SideNavigation>
+        </tnt:sideContent>
         <tnt:mainContents>
             <f:FlexibleColumnLayout id="flexibleColumnLayout" backgroundDesign="Solid">
             </f:FlexibleColumnLayout>

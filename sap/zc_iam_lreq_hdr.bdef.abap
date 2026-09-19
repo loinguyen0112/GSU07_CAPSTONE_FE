@@ -12,7 +12,6 @@ define behavior for ZC_IAM_LREQ_HDR alias Request
   use action reject;
   use action checkSod;
   use action getApprovalRationale;
-  use action getCapabilities;
   use action Edit;
   use action Activate;
   use action Discard;

@@ -2,7 +2,7 @@
 
 specVersion: "4.0"
 metadata:
-  name: hrrequest.hrm
+  name: ziam.dashboard
 type: application
 server:
   customMiddleware:

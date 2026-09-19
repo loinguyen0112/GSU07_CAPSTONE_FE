@@ -1,7 +1,7 @@
 {
   "_version": "1.48.0",
   "sap.app": {
-    "id": "hrrequest.hrm",
+    "id": "ziam.dashboard",
     "type": "application",
     "i18n": "i18n/i18n.properties",
     "applicationVersion": {
@@ -15,9 +15,32 @@
       "version": "1.23.0",
       "toolsId": "26263f98-14a1-44f3-8893-0326ceab041e"
     },
+    "crossNavigation": {
+      "inbounds": {
+        "iamDashboardDisplay": {
+          "semanticObject": "ZIAM_DASHBOARD",
+          "action": "display",
+          "title": "IAM Operations Dashboard",
+          "subTitle": "Users, requests and audit overview",
+          "icon": "sap-icon://business-objects-experience",
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
+        }
+      }
+    },
     "dataSources": {
       "mainService": {
         "uri": "/sap/opu/odata4/sap/zui_iam_lifecycle_o4/srvd/sap/zsd_iam_lifecycle/0001/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "dashboardService": {
+        "uri": "/sap/opu/odata4/sap/zui_iam_dash_o4/srvd/sap/zsd_iam_dash/0001/",
         "type": "OData",
         "settings": {
           "annotations": [],
@@ -49,13 +72,11 @@
       "libs": {
         "sap.m": {},
         "sap.ui.core": {},
-        "sap.ui.mdc": {},
-        "sap.ui.export": {},
-        "sap.ui.fl": {},
         "sap.tnt": {},
         "sap.f": {},
         "sap.ui.layout": {},
-        "sap.uxap": {}
+        "sap.uxap": {},
+        "sap.suite.ui.microchart": {}
       }
     },
     "contentDensities": {
@@ -66,14 +87,14 @@
       "i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
         "settings": {
-          "bundleName": "hrrequest.hrm.i18n.i18n"
+          "bundleName": "ziam.dashboard.i18n.i18n"
         }
       },
       "": {
         "dataSource": "mainService",
         "preload": true,
         "settings": {
-        "synchronizationMode": "None",
+          "synchronizationMode": "None",
           "operationMode": "Server",
           "autoExpandSelect": true,
           "earlyRequests": true,
@@ -82,6 +103,16 @@
               "submit": "API"
             }
           }
+        }
+      },
+      "dashboard": {
+        "dataSource": "dashboardService",
+        "preload": false,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": false
         }
       }
     },
@@ -97,7 +128,7 @@
         "routerClass": "sap.f.routing.Router",
         "viewType": "XML",
         "async": true,
-        "viewPath": "hrrequest.hrm.view",
+        "viewPath": "ziam.dashboard.view",
         "controlId": "flexibleColumnLayout",
         "transition": "slide",
         "clearControlAggregation": false
@@ -145,7 +176,7 @@
       }
     },
     "rootView": {
-      "viewName": "hrrequest.hrm.view.App",
+      "viewName": "ziam.dashboard.view.App",
       "type": "XML",
       "async": true,
       "id": "App"

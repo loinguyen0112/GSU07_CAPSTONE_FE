@@ -49,6 +49,18 @@ CLASS zcl_iam_access_ctrl DEFINITION
         iv_level TYPE c
         iv_text  TYPE string.
 
+    METHODS rollback_luw.
+
+    METHODS message_text
+      IMPORTING
+        iv_number TYPE symsgno
+        iv_v1     TYPE symsgv OPTIONAL
+        iv_v2     TYPE symsgv OPTIONAL
+        iv_v3     TYPE symsgv OPTIONAL
+        iv_v4     TYPE symsgv OPTIONAL
+      RETURNING
+        VALUE(rv_text) TYPE string.
+
     METHODS check_auth
       IMPORTING
         iv_actvt TYPE activ_auth
@@ -199,6 +211,16 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
     APPEND |{ iv_level } { iv_text }| TO mt_log.
   ENDMETHOD.
 
+  METHOD rollback_luw.
+    CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+  ENDMETHOD.
+
+  METHOD message_text.
+    MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER iv_number
+      WITH iv_v1 iv_v2 iv_v3 iv_v4
+      INTO rv_text.
+  ENDMETHOD.
+
   METHOD get_log.
     rt_log = mt_log.
   ENDMETHOD.
@@ -210,7 +232,10 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
     IF rv_ok = abap_false.
       add_log(
         iv_level = 'E'
-        iv_text  = |Missing authorization ZIAM_REQ ACTVT={ iv_actvt }| ).
+        iv_text  = message_text(
+          iv_number = '010'
+          iv_v1     = 'ZIAM_REQ'
+          iv_v2     = CONV symsgv( iv_actvt ) ) ).
     ENDIF.
   ENDMETHOD.
 
@@ -326,51 +351,83 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
     IF lv_warn_from < 1 OR lv_lock_at <= lv_warn_from.
       add_log(
         iv_level = 'E'
-        iv_text  = |Invalid thresholds: warn={ lv_warn_from }, lock={ lv_lock_at }| ).
+        iv_text  = message_text(
+          iv_number = '400'
+          iv_v1     = CONV symsgv( lv_warn_from )
+          iv_v2     = CONV symsgv( lv_lock_at ) ) ).
       RETURN.
     ENDIF.
 
     DATA lt_users TYPE tt_users.
     IF it_bname IS INITIAL.
-      SELECT u~bname,
-             u~ustyp,
-             u~class AS usrgrp,
-             u~uflag,
-             u~erdat,
-             u~trdat,
-             u~gltgv,
-             u~gltgb,
-             i~idadtype
-        FROM usr02 AS u
-        LEFT OUTER JOIN usr21 AS i
-          ON i~bname = u~bname
-        WHERE u~ustyp = 'A'
-          AND ( u~gltgv = '00000000' OR u~gltgv <= @lv_keydate )
-          AND ( u~gltgb = '00000000' OR u~gltgb >= @lv_keydate )
-        INTO TABLE @lt_users.
+      SELECT bname,
+             ustyp,
+             class AS usrgrp,
+             uflag,
+             erdat,
+             trdat,
+             gltgv,
+             gltgb
+        FROM usr02 BYPASSING BUFFER
+        WHERE ustyp = 'A'
+          AND ( gltgv = '00000000' OR gltgv <= @lv_keydate )
+          AND ( gltgb = '00000000' OR gltgb >= @lv_keydate )
+        INTO CORRESPONDING FIELDS OF TABLE @lt_users.
     ELSE.
-      SELECT u~bname,
-             u~ustyp,
-             u~class AS usrgrp,
-             u~uflag,
-             u~erdat,
-             u~trdat,
-             u~gltgv,
-             u~gltgb,
-             i~idadtype
-        FROM usr02 AS u
-        LEFT OUTER JOIN usr21 AS i
-          ON i~bname = u~bname
-        WHERE u~ustyp = 'A'
-          AND u~bname IN @it_bname
-          AND ( u~gltgv = '00000000' OR u~gltgv <= @lv_keydate )
-          AND ( u~gltgb = '00000000' OR u~gltgb >= @lv_keydate )
-        INTO TABLE @lt_users.
+      SELECT bname,
+             ustyp,
+             class AS usrgrp,
+             uflag,
+             erdat,
+             trdat,
+             gltgv,
+             gltgb
+        FROM usr02 BYPASSING BUFFER
+        WHERE ustyp = 'A'
+          AND bname IN @it_bname
+          AND ( gltgv = '00000000' OR gltgv <= @lv_keydate )
+          AND ( gltgb = '00000000' OR gltgb >= @lv_keydate )
+        INTO CORRESPONDING FIELDS OF TABLE @lt_users.
+    ENDIF.
+
+    DATA lt_user_range TYPE tt_bname_range.
+    LOOP AT lt_users INTO DATA(ls_user_key).
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = ls_user_key-bname )
+        TO lt_user_range.
+    ENDLOOP.
+
+    IF lt_user_range IS NOT INITIAL.
+      SELECT bname, idadtype
+        FROM usr21
+        WHERE bname IN @lt_user_range
+        INTO TABLE @DATA(lt_id_types).
+
+      SORT lt_id_types BY bname idadtype.
+      LOOP AT lt_users ASSIGNING FIELD-SYMBOL(<ls_user_id_type>).
+        READ TABLE lt_id_types
+          WITH KEY bname = <ls_user_id_type>-bname
+                   idadtype = '01'
+          TRANSPORTING NO FIELDS
+          BINARY SEARCH.
+        IF sy-subrc = 0.
+          <ls_user_id_type>-idadtype = '01'.
+        ELSE.
+          READ TABLE lt_id_types INTO DATA(ls_id_type)
+            WITH KEY bname = <ls_user_id_type>-bname
+            BINARY SEARCH.
+          IF sy-subrc = 0.
+            <ls_user_id_type>-idadtype = ls_id_type-idadtype.
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
     ENDIF.
 
     add_log(
       iv_level = 'I'
-      iv_text  = |Inactivity scan candidates={ lines( lt_users ) }, key date={ lv_keydate }| ).
+      iv_text  = message_text(
+        iv_number = '401'
+        iv_v1     = CONV symsgv( lines( lt_users ) )
+        iv_v2     = CONV symsgv( lv_keydate ) ) ).
 
     LOOP AT lt_users INTO DATA(ls_user).
       IF ls_user-bname = sy-uname
@@ -385,7 +442,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
            iv_keydate = lv_keydate ) = abap_true.
         add_log(
           iv_level = 'I'
-          iv_text  = |Excluded inactivity account { ls_user-bname }| ).
+          iv_text  = message_text(
+            iv_number = '402'
+            iv_v1     = CONV symsgv( ls_user-bname ) ) ).
         CONTINUE.
       ENDIF.
 
@@ -401,28 +460,38 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
     IF acquire_user_lock( is_user-bname ) = abap_false.
       add_log(
         iv_level = 'W'
-        iv_text  = |Skipped busy user { is_user-bname }; another process owns the lock| ).
+        iv_text  = message_text(
+          iv_number = '026'
+          iv_v1     = CONV symsgv( is_user-bname ) ) ).
       RETURN.
     ENDIF.
 
     DATA ls_fresh TYPE ty_user.
-    SELECT SINGLE
-           u~bname,
-           u~ustyp,
-           u~class AS usrgrp,
-           u~uflag,
-           u~erdat,
-           u~trdat,
-           u~gltgv,
-           u~gltgb,
-           i~idadtype
-      FROM usr02 AS u
-      LEFT OUTER JOIN usr21 AS i
-        ON i~bname = u~bname
-      WHERE u~bname = @is_user-bname
+    SELECT SINGLE bname,
+                  ustyp,
+                  class AS usrgrp,
+                  uflag,
+                  erdat,
+                  trdat,
+                  gltgv,
+                  gltgb
+      FROM usr02
+      WHERE bname = @is_user-bname
       INTO CORRESPONDING FIELDS OF @ls_fresh.
+    DATA(lv_user_found) = xsdbool( sy-subrc = 0 ).
 
-    IF sy-subrc = 0
+    IF lv_user_found = abap_true.
+      SELECT SINGLE idadtype
+        FROM usr21
+        WHERE bname    = @is_user-bname
+          AND idadtype = '01'
+        INTO @ls_fresh-idadtype.
+      IF sy-subrc <> 0.
+        CLEAR ls_fresh-idadtype.
+      ENDIF.
+    ENDIF.
+
+    IF lv_user_found = abap_true
        AND ls_fresh-ustyp = 'A'
        AND ls_fresh-bname <> sy-uname
        AND ls_fresh-bname <> 'SAP*'
@@ -439,7 +508,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
     ELSE.
       add_log(
         iv_level = 'I'
-        iv_text  = |Skipped { is_user-bname } after locked recheck| ).
+        iv_text  = message_text(
+          iv_number = '403'
+          iv_v1     = CONV symsgv( is_user-bname ) ) ).
     ENDIF.
 
     release_user_lock( is_user-bname ).
@@ -460,7 +531,10 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
     IF lv_anchor IS INITIAL OR lv_anchor > iv_keydate.
       add_log(
         iv_level = 'W'
-        iv_text  = |Skipped { is_user-bname }: invalid activity anchor { lv_anchor }| ).
+        iv_text  = message_text(
+          iv_number = '404'
+          iv_v1     = CONV symsgv( is_user-bname )
+          iv_v2     = CONV symsgv( lv_anchor ) ) ).
       RETURN.
     ENDIF.
 
@@ -496,7 +570,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
         IF mv_simulation = abap_true.
           add_log(
             iv_level = 'S'
-            iv_text  = |Would close inactivity case for { is_user-bname } after login| ).
+            iv_text  = message_text(
+              iv_number = '405'
+              iv_v1     = CONV symsgv( is_user-bname ) ) ).
           RETURN.
         ENDIF.
 
@@ -514,12 +590,16 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
           COMMIT WORK AND WAIT.
           add_log(
             iv_level = 'S'
-            iv_text  = |Closed inactivity case for { is_user-bname }| ).
+            iv_text  = message_text(
+              iv_number = '406'
+              iv_v1     = CONV symsgv( is_user-bname ) ) ).
         ELSE.
-          ROLLBACK WORK.
+          rollback_luw( ).
           add_log(
             iv_level = 'E'
-            iv_text  = |Failed to close inactivity case for { is_user-bname }| ).
+            iv_text  = message_text(
+              iv_number = '407'
+              iv_v1     = CONV symsgv( is_user-bname ) ) ).
         ENDIF.
       ENDIF.
       RETURN.
@@ -533,7 +613,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
       IF mv_simulation = abap_true.
         add_log(
           iv_level = 'S'
-          iv_text  = |Would reconcile existing lock for { is_user-bname }| ).
+          iv_text  = message_text(
+            iv_number = '408'
+            iv_v1     = CONV symsgv( is_user-bname ) ) ).
         RETURN.
       ENDIF.
 
@@ -561,7 +643,7 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
            iv_source      = 'INACTIVITY' ) = abap_true.
         COMMIT WORK AND WAIT.
       ELSE.
-        ROLLBACK WORK.
+        rollback_luw( ).
       ENDIF.
       RETURN.
     ENDIF.
@@ -570,14 +652,19 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
       IF ls_case-last_warn = iv_keydate.
         add_log(
           iv_level = 'I'
-          iv_text  = |Warning already sent today to { is_user-bname }| ).
+          iv_text  = message_text(
+            iv_number = '409'
+            iv_v1     = CONV symsgv( is_user-bname ) ) ).
         RETURN.
       ENDIF.
 
       IF mv_simulation = abap_true.
         add_log(
           iv_level = 'S'
-          iv_text  = |Would warn { is_user-bname }: inactive { lv_days } days| ).
+          iv_text  = message_text(
+            iv_number = '410'
+            iv_v1     = CONV symsgv( is_user-bname )
+            iv_v2     = CONV symsgv( lv_days ) ) ).
         RETURN.
       ENDIF.
 
@@ -604,11 +691,14 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
              iv_source      = 'INACTIVITY' ) = abap_true.
           COMMIT WORK AND WAIT.
         ELSE.
-          ROLLBACK WORK.
+          rollback_luw( ).
         ENDIF.
         add_log(
           iv_level = 'E'
-          iv_text  = |Cannot warn { is_user-bname }: { lv_email_message }| ).
+          iv_text  = message_text(
+            iv_number = '411'
+            iv_v1     = CONV symsgv( is_user-bname )
+            iv_v2     = CONV symsgv( lv_email_message ) ) ).
         RETURN.
       ENDIF.
 
@@ -650,21 +740,27 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
            iv_source      = 'INACTIVITY' ) = abap_true.
         COMMIT WORK AND WAIT.
       ELSE.
-        ROLLBACK WORK.
+        rollback_luw( ).
         lv_mail_ok = abap_false.
-        lv_mail_message = 'Persistence or audit failure'.
+        lv_mail_message = message_text( iv_number = '425' ).
       ENDIF.
 
       add_log(
         iv_level = COND #( WHEN lv_mail_ok = abap_true THEN 'S' ELSE 'E' )
-        iv_text  = |Warning { is_user-bname }: { lv_mail_message }| ).
+        iv_text  = message_text(
+          iv_number = '412'
+          iv_v1     = CONV symsgv( is_user-bname )
+          iv_v2     = CONV symsgv( lv_mail_message ) ) ).
       RETURN.
     ENDIF.
 
     IF mv_simulation = abap_true.
       add_log(
         iv_level = 'S'
-        iv_text  = |Would lock { is_user-bname }: inactive { lv_days } days| ).
+        iv_text  = message_text(
+          iv_number = '413'
+          iv_v1     = CONV symsgv( is_user-bname )
+          iv_v2     = CONV symsgv( lv_days ) ) ).
       RETURN.
     ENDIF.
 
@@ -675,7 +771,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
     IF sy-subrc <> 0 OR ls_current-uflag <> 0.
       add_log(
         iv_level = 'W'
-        iv_text  = |Lock skipped after recheck for { is_user-bname }| ).
+        iv_text  = message_text(
+          iv_number = '414'
+          iv_v1     = CONV symsgv( is_user-bname ) ) ).
       RETURN.
     ENDIF.
 
@@ -686,12 +784,14 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
     IF lv_current_anchor IS INITIAL OR lv_current_days < iv_lock_at.
       add_log(
         iv_level = 'W'
-        iv_text  = |Lock skipped: { is_user-bname } logged in during scan| ).
+        iv_text  = message_text(
+          iv_number = '415'
+          iv_v1     = CONV symsgv( is_user-bname ) ) ).
       RETURN.
     ENDIF.
 
     ls_case-status = 'LOCKING'.
-    ls_case-last_error = 'Lock operation started'.
+    ls_case-last_error = message_text( iv_number = '426' ).
     ls_case-changed_by = sy-uname.
     GET TIME STAMP FIELD ls_case-changed_at.
     MODIFY ziam_ctrl_case FROM @ls_case.
@@ -702,10 +802,12 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
          iv_old_value   = 'UNLOCKED'
          iv_new_value   = |DAYS={ lv_current_days }|
          iv_source      = 'INACTIVITY' ) = abap_false.
-      ROLLBACK WORK.
+      rollback_luw( ).
       add_log(
         iv_level = 'E'
-        iv_text  = |Lock not attempted because intent audit failed for { is_user-bname }| ).
+        iv_text  = message_text(
+          iv_number = '416'
+          iv_v1     = CONV symsgv( is_user-bname ) ) ).
       RETURN.
     ENDIF.
     COMMIT WORK AND WAIT.
@@ -734,11 +836,14 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
           iv_source      = 'INACTIVITY' ).
         COMMIT WORK AND WAIT.
       ELSE.
-        ROLLBACK WORK.
+        rollback_luw( ).
       ENDIF.
       add_log(
         iv_level = 'E'
-        iv_text  = |Lock failed for { is_user-bname }: { lv_lock_message }| ).
+        iv_text  = message_text(
+          iv_number = '417'
+          iv_v1     = CONV symsgv( is_user-bname )
+          iv_v2     = CONV symsgv( lv_lock_message ) ) ).
       RETURN.
     ENDIF.
 
@@ -757,7 +862,7 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
        ( ls_locked-local_lock <> 'L' AND ls_locked-glob_lock <> 'L' ).
       ls_case-status = 'LOCK_ERR'.
       ls_case-retry_count = ls_case-retry_count + 1.
-      ls_case-last_error = 'Post-lock verification failed'.
+      ls_case-last_error = message_text( iv_number = '427' ).
       GET TIME STAMP FIELD ls_case-changed_at.
       MODIFY ziam_ctrl_case FROM @ls_case.
       write_audit(
@@ -768,7 +873,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
       COMMIT WORK AND WAIT.
       add_log(
         iv_level = 'E'
-        iv_text  = |Post-lock verification failed for { is_user-bname }| ).
+        iv_text  = message_text(
+          iv_number = '418'
+          iv_v1     = CONV symsgv( is_user-bname ) ) ).
       RETURN.
     ENDIF.
 
@@ -792,12 +899,17 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
       COMMIT WORK AND WAIT.
       add_log(
         iv_level = 'S'
-        iv_text  = |Locked { is_user-bname } after { lv_current_days } inactive days| ).
+        iv_text  = message_text(
+          iv_number = '419'
+          iv_v1     = CONV symsgv( is_user-bname )
+          iv_v2     = CONV symsgv( lv_current_days ) ) ).
     ELSE.
-      ROLLBACK WORK.
+      rollback_luw( ).
       add_log(
         iv_level = 'E'
-        iv_text  = |Account { is_user-bname } is locked, but final Z-audit persistence failed| ).
+        iv_text  = message_text(
+          iv_number = '420'
+          iv_v1     = CONV symsgv( is_user-bname ) ) ).
     ENDIF.
   ENDMETHOD.
 
@@ -820,13 +932,13 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
       RETURN.
     ENDIF.
     IF ls_address-e_mail IS INITIAL.
-      ev_message = 'No email address maintained'.
+      ev_message = message_text( iv_number = '421' ).
       RETURN.
     ENDIF.
 
     ev_email = ls_address-e_mail.
     ev_ok = abap_true.
-    ev_message = 'Email resolved'.
+    ev_message = message_text( iv_number = '422' ).
   ENDMETHOD.
 
   METHOD send_warning.
@@ -884,9 +996,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
         lo_request->set_send_immediately( abap_true ).
         ev_ok = lo_request->send( i_with_error_screen = abap_false ).
         IF ev_ok = abap_true.
-          ev_message = 'Mail queued'.
+          ev_message = message_text( iv_number = '423' ).
         ELSE.
-          ev_message = 'CL_BCS returned not sent'.
+          ev_message = message_text( iv_number = '424' ).
         ENDIF.
       CATCH cx_bcs INTO DATA(lx_bcs).
         ev_message = lx_bcs->get_text( ).
@@ -918,7 +1030,7 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
       ENDIF.
     ENDLOOP.
     IF rv_message IS INITIAL.
-      rv_message = 'No BAPI error message'.
+      rv_message = message_text( iv_number = '028' ).
     ENDIF.
   ENDMETHOD.
 
@@ -986,7 +1098,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
         ev_ok      = lv_read_ok
         ev_message = lv_read_message ).
     IF lv_read_ok = abap_false.
-      ev_message = |Read-after-write failed: { lv_read_message }|.
+      ev_message = message_text(
+        iv_number = '230'
+        iv_v1     = CONV symsgv( lv_read_message ) ).
       RETURN.
     ENDIF.
 
@@ -1001,7 +1115,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
                    to_dat   = iv_expect_to.
       ENDIF.
       IF sy-subrc <> 0.
-        ev_message = |Target role state not applied. { lv_bapi_message }|.
+        ev_message = message_text(
+          iv_number = '231'
+          iv_v1     = CONV symsgv( lv_bapi_message ) ).
         RETURN.
       ENDIF.
     ELSE.
@@ -1015,7 +1131,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
                    to_dat   = iv_expect_to.
       ENDIF.
       IF sy-subrc = 0.
-        ev_message = |Target role fingerprint still exists. { lv_bapi_message }|.
+        ev_message = message_text(
+          iv_number = '232'
+          iv_v1     = CONV symsgv( lv_bapi_message ) ).
         RETURN.
       ENDIF.
     ENDIF.
@@ -1024,15 +1142,17 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
          it_before = it_before
          it_after  = lt_after
          iv_target = iv_target ) = abap_false.
-      ev_message = 'Unrelated role fingerprint changed'.
+      ev_message = message_text( iv_number = '233' ).
       RETURN.
     ENDIF.
 
     ev_ok = abap_true.
     IF lv_bapi_error = abap_true.
-      ev_message = |State verified despite BAPI return: { lv_bapi_message }|.
+      ev_message = message_text(
+        iv_number = '234'
+        iv_v1     = CONV symsgv( lv_bapi_message ) ).
     ELSE.
-      ev_message = 'Role state verified'.
+      ev_message = message_text( iv_number = '235' ).
     ENDIF.
   ENDMETHOD.
 
@@ -1046,7 +1166,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
     IF acquire_user_lock( cs_grant-target_user ) = abap_false.
       add_log(
         iv_level = 'W'
-        iv_text  = |User { cs_grant-target_user } is busy; revoke was not processed| ).
+        iv_text  = message_text(
+          iv_number = '026'
+          iv_v1     = CONV symsgv( cs_grant-target_user ) ) ).
       RETURN.
     ENDIF.
 
@@ -1065,7 +1187,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
     ELSE.
       add_log(
         iv_level = 'E'
-        iv_text  = |Grant { cs_grant-grant_id } no longer exists| ).
+        iv_text  = message_text(
+          iv_number = '209'
+          iv_v1     = CONV symsgv( cs_grant-grant_id ) ) ).
     ENDIF.
 
     release_user_lock( cs_grant-target_user ).
@@ -1075,7 +1199,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
     IF cs_grant-status <> 'ACTIVE' AND cs_grant-status <> 'REVOKE_ERR'.
       add_log(
         iv_level = 'I'
-        iv_text  = |Grant { cs_grant-grant_id } is no longer revocable| ).
+        iv_text  = message_text(
+          iv_number = '210'
+          iv_v1     = CONV symsgv( cs_grant-grant_id ) ) ).
       RETURN.
     ENDIF.
 
@@ -1107,8 +1233,12 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
       WHERE grant_id   = @cs_grant-grant_id
         AND row_version = @cs_grant-row_version.
     IF sy-dbcnt <> 1.
-      ROLLBACK WORK.
-      add_log( iv_level = 'E' iv_text = |Concurrent revoke for { cs_grant-grant_id }| ).
+      rollback_luw( ).
+      add_log(
+        iv_level = 'E'
+        iv_text  = message_text(
+          iv_number = '211'
+          iv_v1     = CONV symsgv( cs_grant-grant_id ) ) ).
       RETURN.
     ENDIF.
     COMMIT WORK AND WAIT.
@@ -1124,7 +1254,7 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
     DATA lv_revoke_message TYPE char255.
 
     IF cs_grant-role_added = abap_false.
-      lv_revoke_message = 'No physical revoke: baseline or overlapping role preserved'.
+      lv_revoke_message = message_text( iv_number = '212' ).
     ELSE.
       SELECT *
         FROM ziam_ff_grant
@@ -1158,7 +1288,7 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
                      to_dat   = cs_grant-role_to.
           IF sy-subrc <> 0.
             lv_revoke_ok = abap_false.
-            lv_revoke_message = 'Managed role missing during ownership transfer'.
+            lv_revoke_message = message_text( iv_number = '213' ).
           ELSE.
             ls_other-role_added = abap_true.
             ls_other-role_from = ls_current_role-from_dat.
@@ -1168,10 +1298,12 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
             ls_other-changed_at = lv_now.
             MODIFY ziam_ff_grant FROM @ls_other.
             IF sy-subrc = 0.
-              lv_revoke_message = |Role retained for overlapping grant { ls_other-grant_id }|.
+              lv_revoke_message = message_text(
+                iv_number = '229'
+                iv_v1     = CONV symsgv( ls_other-grant_id ) ).
             ELSE.
               lv_revoke_ok = abap_false.
-              lv_revoke_message = 'Failed to transfer managed role ownership'.
+              lv_revoke_message = message_text( iv_number = '214' ).
             ENDIF.
           ENDIF.
         ENDIF.
@@ -1199,9 +1331,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
               WITH KEY agr_name = cs_grant-agr_name.
             IF sy-subrc = 0.
               lv_revoke_ok = abap_false.
-              lv_revoke_message = 'DRIFT: managed role validity changed; manual review required'.
+              lv_revoke_message = message_text( iv_number = '215' ).
             ELSE.
-              lv_revoke_message = 'Managed role was already absent'.
+              lv_revoke_message = message_text( iv_number = '216' ).
             ENDIF.
           ELSE.
             DATA lt_desired TYPE tt_bapiagr.
@@ -1269,23 +1401,31 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
          iv_source      = 'FIREFIGHT' ) = abap_true.
       COMMIT WORK AND WAIT.
     ELSE.
-      ROLLBACK WORK.
+      rollback_luw( ).
       add_log(
         iv_level = 'E'
-        iv_text  = |Role state changed for { cs_grant-grant_id }, but final Z-audit failed; recovery is required| ).
+        iv_text  = message_text(
+          iv_number = '217'
+          iv_v1     = CONV symsgv( cs_grant-grant_id ) ) ).
       RETURN.
     ENDIF.
 
     add_log(
       iv_level = COND #( WHEN lv_revoke_ok = abap_true THEN 'S' ELSE 'E' )
-      iv_text  = |FF close { cs_grant-grant_id }: { lv_revoke_message }| ).
+      iv_text  = message_text(
+        iv_number = '218'
+        iv_v1     = CONV symsgv( cs_grant-grant_id )
+        iv_v2     = CONV symsgv( lv_revoke_message ) ) ).
   ENDMETHOD.
 
   METHOD process_pending_ff_grants.
     DATA lv_now TYPE timestampl.
     GET TIME STAMP FIELD lv_now.
 
-    SELECT *
+    SELECT grant_id,
+           target_user,
+           agr_name,
+           row_version
       FROM ziam_ff_grant
       WHERE status = 'PENDING'
         AND start_at <= @lv_now
@@ -1293,38 +1433,49 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
 
     add_log(
       iv_level = 'I'
-      iv_text  = |Firefighter pending candidates={ lines( lt_pending ) }| ).
+      iv_text  = message_text(
+        iv_number = '219'
+        iv_v1     = CONV symsgv( lines( lt_pending ) ) ) ).
 
-    LOOP AT lt_pending INTO DATA(ls_pending).
+    DATA ls_pending TYPE ziam_ff_grant.
+    LOOP AT lt_pending INTO DATA(ls_pending_key).
       IF mv_simulation = abap_true.
         add_log(
           iv_level = 'S'
-          iv_text  = |Would grant FF { ls_pending-grant_id } for { ls_pending-target_user }/{ ls_pending-agr_name }| ).
+          iv_text  = message_text(
+            iv_number = '220'
+            iv_v1     = CONV symsgv( ls_pending_key-grant_id )
+            iv_v2     = CONV symsgv( ls_pending_key-target_user )
+            iv_v3     = CONV symsgv( ls_pending_key-agr_name ) ) ).
         CONTINUE.
       ENDIF.
 
-      IF acquire_user_lock( ls_pending-target_user ) = abap_false.
+      IF acquire_user_lock( ls_pending_key-target_user ) = abap_false.
         add_log(
           iv_level = 'W'
-          iv_text  = |User { ls_pending-target_user } is busy; FF grant was deferred| ).
+          iv_text  = message_text(
+            iv_number = '026'
+            iv_v1     = CONV symsgv( ls_pending_key-target_user ) ) ).
         CONTINUE.
       ENDIF.
 
       SELECT SINGLE *
         FROM ziam_ff_grant
-        WHERE grant_id    = @ls_pending-grant_id
+        WHERE grant_id    = @ls_pending_key-grant_id
           AND status      = 'PENDING'
-          AND row_version = @ls_pending-row_version
+          AND row_version = @ls_pending_key-row_version
         INTO @ls_pending.
       IF sy-subrc <> 0.
-        release_user_lock( ls_pending-target_user ).
+        release_user_lock( ls_pending_key-target_user ).
         CONTINUE.
       ENDIF.
 
       "No role is granted after the approved time-box has already elapsed.
       IF ls_pending-end_at <= lv_now.
         ls_pending-status = 'EXPIRED'.
-        ls_pending-last_message = 'Expired before background grant processing'.
+        ls_pending-last_message = message_text(
+          iv_number = '221'
+          iv_v1     = CONV symsgv( ls_pending-grant_id ) ).
         ls_pending-row_version = ls_pending-row_version + 1.
         ls_pending-changed_by = sy-uname.
         ls_pending-changed_at = lv_now.
@@ -1338,7 +1489,7 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
              iv_source      = 'FIREFIGHT' ) = abap_true.
           COMMIT WORK AND WAIT.
         ELSE.
-          ROLLBACK WORK.
+          rollback_luw( ).
         ENDIF.
         release_user_lock( ls_pending-target_user ).
         CONTINUE.
@@ -1354,15 +1505,19 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
           lv_token = cl_system_uuid=>create_uuid_c32_static( ).
         CATCH cx_parameter_invalid INTO DATA(lx_pending_time).
           add_log( iv_level = 'E' iv_text = lx_pending_time->get_text( ) ).
-          release_user_lock( ls_pending-target_user ).
+          release_user_lock( ls_pending_key-target_user ).
           CONTINUE.
         CATCH cx_uuid_error INTO DATA(lx_pending_uuid).
           add_log( iv_level = 'E' iv_text = lx_pending_uuid->get_text( ) ).
-          release_user_lock( ls_pending-target_user ).
+          release_user_lock( ls_pending_key-target_user ).
           CONTINUE.
       ENDTRY.
 
       lv_claim_version = ls_pending-row_version + 1.
+      DATA lv_processing_message TYPE ziam_ff_grant-last_message.
+      lv_processing_message = message_text(
+        iv_number = '222'
+        iv_v1     = CONV symsgv( ls_pending-grant_id ) ).
 
       UPDATE ziam_ff_grant
         SET status        = 'GRANTING',
@@ -1371,13 +1526,13 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
             row_version   = @lv_claim_version,
             changed_by    = @sy-uname,
             changed_at    = @lv_now,
-            last_message  = 'Background role assignment in progress'
+            last_message  = @lv_processing_message
         WHERE grant_id    = @ls_pending-grant_id
           AND status      = 'PENDING'
           AND row_version = @ls_pending-row_version.
       IF sy-dbcnt <> 1.
-        ROLLBACK WORK.
-        release_user_lock( ls_pending-target_user ).
+        rollback_luw( ).
+        release_user_lock( ls_pending_key-target_user ).
         CONTINUE.
       ENDIF.
       COMMIT WORK AND WAIT.
@@ -1398,7 +1553,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
         READ TABLE lt_before TRANSPORTING NO FIELDS
           WITH KEY agr_name = ls_pending-agr_name.
         IF sy-subrc = 0.
-          lv_message = 'Target role already exists; no temporary-role ownership was created'.
+          lv_message = message_text(
+            iv_number = '223'
+            iv_v1     = CONV symsgv( ls_pending-agr_name ) ).
         ELSE.
           DATA(lt_desired) = lt_before.
           APPEND VALUE #( agr_name = ls_pending-agr_name
@@ -1430,7 +1587,9 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
         ls_pending-role_added = abap_true.
         ls_pending-role_from = sy-datum.
         ls_pending-role_to = '99991231'.
-        ls_pending-last_message = 'Role granted by background job'.
+        ls_pending-last_message = message_text(
+          iv_number = '224'
+          iv_v1     = CONV symsgv( ls_pending-grant_id ) ).
       ELSE.
         ls_pending-status = 'GRANT_ERR'.
         ls_pending-retry_count = ls_pending-retry_count + 1.
@@ -1450,12 +1609,15 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
            iv_source      = 'FIREFIGHT' ) = abap_true.
         COMMIT WORK AND WAIT.
       ELSE.
-        ROLLBACK WORK.
+        rollback_luw( ).
       ENDIF.
 
       add_log(
         iv_level = COND #( WHEN lv_grant_ok = abap_true THEN 'S' ELSE 'E' )
-        iv_text  = |FF grant { ls_pending-grant_id }: { ls_pending-last_message }| ).
+        iv_text  = message_text(
+          iv_number = '218'
+          iv_v1     = CONV symsgv( ls_pending-grant_id )
+          iv_v2     = CONV symsgv( ls_pending-last_message ) ) ).
       release_user_lock( ls_pending-target_user ).
     ENDLOOP.
   ENDMETHOD.
@@ -1464,20 +1626,21 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
     DATA lv_now TYPE timestampl.
     GET TIME STAMP FIELD lv_now.
 
-    SELECT *
+    SELECT grant_id, target_user
       FROM ziam_ff_grant
       WHERE status = 'GRANTING'
         AND process_until <= @lv_now
       INTO TABLE @DATA(lt_granting).
-    LOOP AT lt_granting INTO DATA(ls_granting).
-      DATA(lv_recovery_user) = ls_granting-target_user.
+    DATA ls_granting TYPE ziam_ff_grant.
+    LOOP AT lt_granting INTO DATA(ls_granting_key).
+      DATA(lv_recovery_user) = ls_granting_key-target_user.
       IF acquire_user_lock( lv_recovery_user ) = abap_false.
         CONTINUE.
       ENDIF.
 
       SELECT SINGLE *
         FROM ziam_ff_grant
-        WHERE grant_id     = @ls_granting-grant_id
+        WHERE grant_id     = @ls_granting_key-grant_id
           AND status       = 'GRANTING'
           AND process_until <= @lv_now
         INTO @ls_granting.
@@ -1524,11 +1687,15 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
         IF ls_granting-granted_at IS INITIAL.
           ls_granting-granted_at = ls_granting-changed_at.
         ENDIF.
-        ls_granting-last_message = 'Recovered GRANTING state from actual role'.
+        ls_granting-last_message = message_text(
+          iv_number = '225'
+          iv_v1     = CONV symsgv( ls_granting-grant_id ) ).
       ELSE.
         ls_granting-status = 'GRANT_ERR'.
         ls_granting-retry_count = ls_granting-retry_count + 1.
-        ls_granting-last_message = 'Stale GRANTING state; role not verified'.
+        ls_granting-last_message = message_text(
+          iv_number = '226'
+          iv_v1     = CONV symsgv( ls_granting-grant_id ) ).
       ENDIF.
       MODIFY ziam_ff_grant FROM @ls_granting.
       DATA(lv_recovery_action) = COND char20(
@@ -1549,12 +1716,12 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
           iv_result = lv_recovery_action ).
         COMMIT WORK AND WAIT.
       ELSE.
-        ROLLBACK WORK.
+        rollback_luw( ).
       ENDIF.
       release_user_lock( lv_recovery_user ).
     ENDLOOP.
 
-    SELECT *
+    SELECT grant_id, target_user
       FROM ziam_ff_grant
       WHERE status = 'REVOKING'
         AND process_until <= @lv_now
@@ -1582,7 +1749,7 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
            iv_source      = 'FIREFIGHT' ) = abap_true.
         COMMIT WORK AND WAIT.
       ELSE.
-        ROLLBACK WORK.
+        rollback_luw( ).
       ENDIF.
       release_user_lock( ls_revoking-target_user ).
     ENDLOOP.
@@ -1609,12 +1776,18 @@ CLASS zcl_iam_access_ctrl IMPLEMENTATION.
 
     add_log(
       iv_level = 'I'
-      iv_text  = |Firefighter expiry candidates={ lines( lt_expired ) }| ).
+      iv_text  = message_text(
+        iv_number = '227'
+        iv_v1     = CONV symsgv( lines( lt_expired ) ) ) ).
     LOOP AT lt_expired INTO DATA(ls_grant).
       IF mv_simulation = abap_true.
         add_log(
           iv_level = 'S'
-          iv_text  = |Would expire FF grant { ls_grant-grant_id } for { ls_grant-target_user }/{ ls_grant-agr_name }| ).
+          iv_text  = message_text(
+            iv_number = '228'
+            iv_v1     = CONV symsgv( ls_grant-grant_id )
+            iv_v2     = CONV symsgv( ls_grant-target_user )
+            iv_v3     = CONV symsgv( ls_grant-agr_name ) ) ).
       ELSE.
         close_grant(
           EXPORTING

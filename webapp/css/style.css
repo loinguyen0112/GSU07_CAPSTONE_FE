@@ -1,5 +1,21 @@
 /* Custom CSS for HR Request App */
 
+.iamDashboard .sapFDynamicPageContent {
+    background: #f5f7fa;
+}
+
+.iamKpiCard,
+.iamDashboardPanel {
+    border-radius: 0.75rem;
+    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.08);
+}
+
+.iamKpiCard .sapMPanelContent {
+    min-height: 4rem;
+    display: flex;
+    align-items: center;
+}
+
 .sapTntToolPage {
     background-color: #f4f6f8;
 }
@@ -57,6 +73,16 @@
     border-radius: 16px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.05);
     padding: 2rem;
+}
+
+/* Keep long request and review steps reachable in the standalone BSP app.
+   Some UI5 versions leave the Page content section at overflow-y:hidden even
+   when enableScrolling is true, so scope the native scroller to this page. */
+.iamRequestWizardPage > section {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
 }
 
 .iamLeaverFlow {

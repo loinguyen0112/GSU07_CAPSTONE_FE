@@ -71,8 +71,8 @@ METHOD approve.
     IF lv_approve_risk = 3 AND <ls_key>-%param-ApprovalReason IS INITIAL.
       APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
       APPEND VALUE #( %tky = ls_request-%tky
-        %msg = new_message( id = 'ZIAM_REQ' number = '001' severity = if_abap_behv_message=>severity-error
-                            v1 = 'Approval rationale is required for Critical SoD' ) ) TO reported-request.
+        %msg = new_message( id = 'ZMSG_IAM07' number = '100'
+                            severity = if_abap_behv_message=>severity-error ) ) TO reported-request.
       CONTINUE.
     ENDIF.
 
@@ -96,7 +96,7 @@ METHOD approve.
       IF ls_grant_result-ok = abap_false.
         APPEND VALUE #( %tky = ls_request-%tky ) TO failed-request.
         APPEND VALUE #( %tky = ls_request-%tky
-          %msg = new_message( id = 'ZIAM_REQ' number = '001' severity = if_abap_behv_message=>severity-error
+          %msg = new_message( id = 'ZMSG_IAM07' number = '001' severity = if_abap_behv_message=>severity-error
                               v1 = ls_grant_result-message ) ) TO reported-request.
         CONTINUE.
       ENDIF.

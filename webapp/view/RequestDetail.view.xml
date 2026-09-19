@@ -1,4 +1,4 @@
-<mvc:View controllerName="hrrequest.hrm.controller.RequestDetail"
+<mvc:View controllerName="ziam.dashboard.controller.RequestDetail"
     xmlns:mvc="sap.ui.core.mvc"
     xmlns:uxap="sap.uxap"
     xmlns:layout="sap.ui.layout"
@@ -180,8 +180,18 @@
                 <uxap:subSections>
                     <uxap:ObjectPageSubSection>
                         <uxap:blocks>
-                            <m:Table id="rolesTable"
-                                items="{path: '_Roles', parameters: { $$updateGroupId: 'iamChanges' }}">
+                            <m:VBox>
+                                <m:HBox justifyContent="End" class="sapUiTinyMarginBottom">
+                                    <m:Button text="Add Role" icon="sap-icon://add" type="Emphasized"
+                                        visible="{edit>/isEditing}" press=".onAddRolePress"/>
+                                </m:HBox>
+                                <!-- Keep newly created role items in the same explicit
+                                     update group as the draft header.  Without this,
+                                     OData V4 sends the child create on $auto while
+                                     Save flushes only iamChanges, leaving the Save
+                                     action waiting indefinitely. -->
+                                <m:Table id="rolesTable"
+                                    items="{path: '_Roles', parameters: { $$updateGroupId: 'iamChanges' }}">
                                 <m:columns>
                                     <m:Column>
                                         <m:Text text="Role Name"/>
@@ -213,7 +223,8 @@
                                         </m:cells>
                                     </m:ColumnListItem>
                                 </m:items>
-                            </m:Table>
+                                </m:Table>
+                            </m:VBox>
                         </uxap:blocks>
                     </uxap:ObjectPageSubSection>
                 </uxap:subSections>
@@ -236,6 +247,7 @@
                                     <m:Column><m:Text text="Risk"/></m:Column>
                                     <m:Column><m:Text text="Rule"/></m:Column>
                                     <m:Column><m:Text text="Role Pair"/></m:Column>
+                                    <m:Column><m:Text text="Exemption"/></m:Column>
                                     <m:Column><m:Text text="Suggested Action"/></m:Column>
                                 </m:columns>
                                 <m:items>
@@ -244,6 +256,7 @@
                                             <m:ObjectStatus text="{detail>RiskLevel}" state="{= ${detail>RiskLevel} === 'C' ? 'Error' : (${detail>RiskLevel} === 'H' ? 'Warning' : 'Information') }"/>
                                             <m:Text text="{detail>RuleId} - {detail>RuleName}"/>
                                             <m:Text text="{detail>Role1} / {detail>Role2}"/>
+                                            <m:Text text="{= ${detail>IsExempt} ? ${detail>ExemptReason} : 'No active exemption' }"/>
                                             <m:Text text="{detail>SuggestedAction}"/>
                                         </m:cells>
                                     </m:ColumnListItem>

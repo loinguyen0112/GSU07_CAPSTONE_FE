@@ -26,8 +26,7 @@ CLASS zcl_iam_ff_service DEFINITION
       RETURNING
         VALUE(rs_result) TYPE ty_result.
 
-    "Shared validation used by draft/save/submit and approval paths.  The
-    "allowlist is the source of truth for the maximum duration per role.
+  PRIVATE SECTION.
     CLASS-METHODS validate_request
       IMPORTING
         iv_emergency_role TYPE agr_name
@@ -35,7 +34,6 @@ CLASS zcl_iam_ff_service DEFINITION
       RETURNING
         VALUE(rv_error) TYPE char255.
 
-  PRIVATE SECTION.
     CLASS-METHODS write_audit
       IMPORTING iv_action TYPE char20 iv_target_user TYPE xubname iv_request_uuid TYPE sysuuid_x16 iv_new_value TYPE char255
       RETURNING VALUE(rv_ok) TYPE abap_bool.
@@ -57,11 +55,14 @@ CLASS zcl_iam_ff_service IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    SELECT SINGLE grant_id FROM ziam_ff_grant
+    SELECT grant_id FROM ziam_ff_grant
       WHERE request_uuid = @iv_request_uuid AND status IN ( 'PENDING', 'GRANTING', 'ACTIVE', 'REVOKE_ERR' )
-      INTO @DATA(lv_existing_grant).
-    IF sy-subrc = 0.
-      rs_result-message = |A Firefighter grant is already queued or in progress for this request. Grant ID: { lv_existing_grant }. Check grant status or have an administrator resolve a stale grant.|.
+      INTO TABLE @DATA(lt_existing_grants).
+    IF lt_existing_grants IS NOT INITIAL.
+      SORT lt_existing_grants BY grant_id DESCENDING.
+      DATA(lv_existing_grant) = lt_existing_grants[ 1 ]-grant_id.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '203'
+        WITH lv_existing_grant INTO rs_result-message.
       rs_result-grant_id = lv_existing_grant.
       RETURN.
     ENDIF.
@@ -69,7 +70,8 @@ CLASS zcl_iam_ff_service IMPLEMENTATION.
     TRY.
         ls_grant-grant_id = cl_system_uuid=>create_uuid_c32_static( ).
       CATCH cx_uuid_error.
-        rs_result-message = 'Unable to create Firefighter grant ID'.
+        MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '204'
+          INTO rs_result-message.
         RETURN.
     ENDTRY.
 
@@ -77,7 +79,8 @@ CLASS zcl_iam_ff_service IMPLEMENTATION.
     TRY.
         lv_end = cl_abap_tstmp=>add( tstmp = lv_start secs = CONV tzntstmpl( iv_duration_hours * 3600 ) ).
       CATCH cx_parameter_invalid.
-        rs_result-message = 'Unable to calculate Firefighter expiry timestamp'.
+        MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '205'
+          INTO rs_result-message.
         RETURN.
     ENDTRY.
 
@@ -103,7 +106,8 @@ CLASS zcl_iam_ff_service IMPLEMENTATION.
     ls_grant-changed_at     = lv_start.
     INSERT ziam_ff_grant FROM @ls_grant.
     IF sy-subrc <> 0.
-      rs_result-message = 'Unable to create Firefighter grant record'.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '206'
+        INTO rs_result-message.
       RETURN.
     ENDIF.
 
@@ -111,12 +115,14 @@ CLASS zcl_iam_ff_service IMPLEMENTATION.
          iv_action = 'FF_GRANT_PENDING' iv_target_user = iv_target_user iv_request_uuid = iv_request_uuid
          iv_new_value = |GRANT={ ls_grant-grant_id };ROLE={ iv_emergency_role };END={ lv_end }| ) = abap_false.
       DELETE FROM ziam_ff_grant WHERE grant_id = @ls_grant-grant_id.
-      rs_result-message = 'Grant creation was cancelled because Z-audit logging failed'.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '207'
+        INTO rs_result-message.
       RETURN.
     ENDIF.
 
     rs_result-ok = abap_true.
-    rs_result-message = 'Firefighter grant queued for background processing'.
+    MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '208'
+      INTO rs_result-message.
     rs_result-grant_id = ls_grant-grant_id.
     rs_result-start_at = lv_start.
     rs_result-end_at = lv_end.
@@ -124,18 +130,21 @@ CLASS zcl_iam_ff_service IMPLEMENTATION.
 
   METHOD validate_request.
     IF iv_duration_hours < 1 OR iv_duration_hours > 24.
-      rv_error = 'Duration must be between 1 and 24 hours'.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '200'
+        INTO rv_error.
       RETURN.
     ENDIF.
     SELECT SINGLE max_hours FROM ziam_ff_role
       WHERE agr_name = @iv_emergency_role AND is_active = 'X'
       INTO @DATA(lv_max_hours).
     IF sy-subrc <> 0.
-      rv_error = 'Emergency role is not active in the Firefighter allowlist'.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '201'
+        INTO rv_error.
       RETURN.
     ENDIF.
     IF lv_max_hours > 0 AND iv_duration_hours > lv_max_hours.
-      rv_error = |Duration exceeds allowlist maximum of { lv_max_hours } hour(s)|.
+      MESSAGE ID 'ZMSG_IAM07' TYPE 'S' NUMBER '202'
+        WITH lv_max_hours INTO rv_error.
     ENDIF.
   ENDMETHOD.
 

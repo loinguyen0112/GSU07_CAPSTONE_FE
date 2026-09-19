@@ -1,5 +1,5 @@
 /*global QUnit*/
-import Controller from "hrrequest/hrm/controller/Main.controller";
+import Controller from "ziam/dashboard/controller/Main.controller";
 
 QUnit.module("Main Controller");
 

@@ -16,7 +16,7 @@ AT SELECTION-SCREEN.
   IF p_mode <> 'I'
      AND p_mode <> 'E'
      AND p_mode <> 'B'.
-    MESSAGE 'Invalid mode. Use I, E, or B only.' TYPE 'E'.
+    MESSAGE e020(zmsg_iam07).
   ENDIF.
 
 START-OF-SELECTION.
@@ -43,7 +43,7 @@ START-OF-SELECTION.
       lo_control->run_firefighter_expiry( ).
 
     WHEN OTHERS.
-      WRITE: / 'Invalid mode. Use I/E/B only.'.
+      MESSAGE e020(zmsg_iam07).
   ENDCASE.
 
   LOOP AT lo_control->get_log( ) INTO DATA(lv_log).

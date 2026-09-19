@@ -1,116 +1,101 @@
-<mvc:View controllerName="hrrequest.hrm.controller.Dashboard"
+<mvc:View controllerName="ziam.dashboard.controller.Dashboard"
     xmlns:mvc="sap.ui.core.mvc"
     xmlns:f="sap.f"
-    xmlns:core="sap.ui.core"
-    xmlns:mdc="sap.ui.mdc"
-    xmlns:mdcTable="sap.ui.mdc.table"
+    xmlns:l="sap.ui.layout"
+    xmlns:mc="sap.suite.ui.microchart"
     xmlns="sap.m">
-    <f:DynamicPage id="dynamicPageId" toggleHeaderOnTitleClick="false">
+    <f:DynamicPage id="dynamicPageId" toggleHeaderOnTitleClick="false" class="iamDashboard">
         <f:title>
             <f:DynamicPageTitle>
+                <f:heading><Title text="IAM Operations Dashboard"/></f:heading>
+                <f:expandedContent><Text text="Overview of users, requests and audit activity"/></f:expandedContent>
                 <f:actions>
-                    <Button id="createRequestButton" text="Create New Request" type="Emphasized"
-                        icon="sap-icon://add-document" visible="{listState>/canCreate}" press=".onCreateRequest"/>
+                    <Button text="Refresh" icon="sap-icon://refresh" press=".onRefresh"/>
+                    <Button text="Create Request" type="Emphasized" visible="{dashboard>/canCreate}" press=".onCreateRequest"/>
                 </f:actions>
             </f:DynamicPageTitle>
         </f:title>
-
         <f:header>
             <f:DynamicPageHeader pinnable="true">
-                <HBox wrap="Wrap" fitContainer="true" alignItems="Center" class="sapUiSmallMarginBottom">
-                    <VBox class="sapUiTinyMarginEnd">
-                        <Label text="Search Employee" />
-                        <SearchField id="searchField" width="15rem" placeholder="Name or ID..." search=".onSearch"/>
-                    </VBox>
-                    <VBox class="sapUiTinyMarginEnd">
-                        <Label text="Status" />
-                        <ComboBox id="statusFilter" width="10rem" selectionChange=".onFilterChange">
-                            <core:Item key="" text="All" />
-                            <core:Item key="01" text="Draft" />
-                            <core:Item key="02" text="Submitted" />
-                            <core:Item key="03" text="Approved" />
-                            <core:Item key="04" text="Rejected" />
-                        </ComboBox>
-                    </VBox>
-                    <VBox class="sapUiTinyMarginEnd">
-                        <Label text="Department" />
-                        <ComboBox id="departmentFilter" width="18rem" placeholder="All departments"
-                            selectionChange=".onFilterChange" change=".onFilterChange"
-                            showSecondaryValues="true" items="{filters>/departments}">
-                            <core:Item key="{filters>DepartmentID}" text="{filters>DepartmentID} - {filters>DepartmentName}" additionalText="{filters>DepartmentName}" />
-                        </ComboBox>
-                    </VBox>
-                    <VBox class="sapUiTinyMarginEnd">
-                        <Label text="Requested Role" />
-                        <ComboBox id="roleFilter" width="16rem" placeholder="All roles"
-                            selectionChange=".onFilterChange" change=".onFilterChange"
-                            items="{filters>/roles}">
-                            <core:Item key="{filters>RoleName}" text="{filters>RoleName}" additionalText="{filters>Description}" />
-                        </ComboBox>
-                    </VBox>
-                    <Button text="Go" type="Emphasized" tooltip="Refresh request data"
-                        press=".onGo" class="sapUiTinyMarginBegin sapUiSmallMarginTop"/>
+                <HBox wrap="Wrap" alignItems="Center" class="sapUiTinyMarginBottom">
+                    <ObjectStatus title="Last refresh" text="{dashboard>/lastRefresh}" state="Information" class="sapUiSmallMarginEnd"/>
+                    <ObjectStatus title="Run by" text="{dashboard>/runBy}" class="sapUiSmallMarginEnd"/>
+                    <ObjectStatus title="Data scope" text="All current records"/>
                 </HBox>
             </f:DynamicPageHeader>
         </f:header>
-
         <f:content>
-            <mdc:Table id="requestTable"
-                header="{= 'Requests (' + ${listState>/count} + ')' }"
-                headerVisible="true"
-                delegate="{
-                    name: 'hrrequest/hrm/delegate/RequestTableDelegate',
-                    payload: { collectionName: 'Request' }
-                }"
-                p13nMode="Column,Sort"
-                sortConditions='{"sorters":[{"name":"LastChangedAt","descending":true}]}'
-                enableColumnResize="true"
-                autoBindOnInit="true"
-                showRowCount="false"
-                rowPress=".onItemSelect"
-                class="requestTable">
-                <mdc:type>
-                    <mdcTable:ResponsiveTableType growingMode="Scroll" showDetailsButton="true" />
-                </mdc:type>
-                <mdc:actions>
-                    <Button text="Export" icon="sap-icon://excel-attachment" tooltip="Export requests to Excel" press=".onExportRequests"/>
-                </mdc:actions>
-                <mdc:columns>
-                    <mdcTable:Column id="employeeColumn" dataProperty="TargetUser" header="Employee" width="13rem" importance="High">
-                        <ObjectIdentifier title="{TargetUser}" text="{FirstName} {LastName}" titleActive="true" titlePress=".onItemSelect" />
-                    </mdcTable:Column>
-                    <mdcTable:Column id="requestColumn" dataProperty="ReqId" header="Request" width="9rem" importance="High">
-                        <Text text="{ReqId}" />
-                    </mdcTable:Column>
-                    <mdcTable:Column id="requestTypeColumn" dataProperty="ReqTypeText" header="Request Type" width="10rem" importance="High">
-                        <Text text="{ReqTypeText}" />
-                    </mdcTable:Column>
-                    <mdcTable:Column id="departmentColumn" dataProperty="Department" header="Department" width="10rem" importance="High">
-                        <Text text="{Department}" />
-                    </mdcTable:Column>
-                    <mdcTable:Column id="emailColumn" dataProperty="Email" header="Email" width="14rem" importance="Medium">
-                        <Text text="{Email}" />
-                    </mdcTable:Column>
-                    <mdcTable:Column id="createdAtColumn" dataProperty="CreatedAt" header="Created At" width="12rem" importance="Low">
-                        <Text text="{ path: 'CreatedAt', formatter: 'hrrequest.hrm.model.formatter.formatDateTime' }" />
-                    </mdcTable:Column>
-                    <mdcTable:Column id="requestCreatorColumn" dataProperty="CreatedBy" header="Request Creator" width="11rem" importance="Low">
-                        <Text text="{ parts: [{ path: 'RequestedBy' }, { path: 'CreatedBy' }], formatter: 'hrrequest.hrm.model.formatter.formatRequestCreator' }" />
-                    </mdcTable:Column>
-                    <mdcTable:Column id="lastChangedAtColumn" dataProperty="LastChangedAt" header="Last Changed At" width="12rem" importance="Low">
-                        <Text text="{ path: 'LastChangedAt', formatter: 'hrrequest.hrm.model.formatter.formatDateTime' }" />
-                    </mdcTable:Column>
-                    <mdcTable:Column id="changedByColumn" dataProperty="LastChangedBy" header="Changed By" width="10rem" importance="Low">
-                        <Text text="{LastChangedBy}" />
-                    </mdcTable:Column>
-                    <mdcTable:Column id="approvedByColumn" dataProperty="ApprovedBy" header="Approved By" width="10rem" importance="Low">
-                        <Text text="{ApprovedBy}" />
-                    </mdcTable:Column>
-                    <mdcTable:Column id="statusColumn" dataProperty="Status" header="Status" width="8rem" hAlign="End" importance="High">
-                        <ObjectStatus text="{StatusText}" state="{= ${Status} === '01' ? 'Information' : (${Status} === '02' ? 'Warning' : (${Status} === '03' ? 'Success' : (${Status} === '04' ? 'Error' : 'None'))) }" />
-                    </mdcTable:Column>
-                </mdc:columns>
-            </mdc:Table>
+            <VBox class="sapUiSmallMargin">
+                <MessageStrip text="{dashboard>/error}" type="Error" showIcon="true" visible="{= !!${dashboard>/error}}" class="sapUiSmallMarginBottom"/>
+                <l:Grid defaultSpan="XL3 L3 M6 S12" hSpacing="1" vSpacing="1" class="sapUiSmallMarginBottom">
+                    <Panel headerText="Total Users" class="iamKpiCard"><content><ObjectNumber number="{dashboard>/kpi/totalUsers}" emphasized="true"/></content></Panel>
+                    <Panel headerText="Active Users" class="iamKpiCard"><content><ObjectNumber number="{dashboard>/kpi/activeUsers}" state="Success"/></content></Panel>
+                    <Panel headerText="Inactive / Locked" class="iamKpiCard"><content><ObjectNumber number="{dashboard>/kpi/inactiveUsers}" state="Error"/></content></Panel>
+                    <Panel headerText="Pending Requests" class="iamKpiCard"><content><ObjectNumber number="{dashboard>/kpi/pendingRequests}" state="Warning"/></content></Panel>
+                    <Panel headerText="Audit Events Today" class="iamKpiCard"><content><ObjectNumber number="{dashboard>/kpi/auditToday}" state="Information"/></content></Panel>
+                </l:Grid>
+                <l:Grid defaultSpan="XL4 L4 M12 S12" hSpacing="1" vSpacing="1" class="sapUiSmallMarginBottom">
+                    <Panel headerText="Request status" class="iamDashboardPanel">
+                        <content>
+                            <VBox items="{dashboard>/requestStatus}">
+                                <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                                    <Text text="{dashboard>label}" width="8rem"/>
+                                    <ProgressIndicator percentValue="{dashboard>percent}" displayValue="{dashboard>count}" width="100%" state="{dashboard>state}"/>
+                                </HBox>
+                            </VBox>
+                        </content>
+                    </Panel>
+                    <Panel headerText="Top audit actions" class="iamDashboardPanel">
+                        <content>
+                            <List items="{dashboard>/topActions}" showSeparators="Inner">
+                                <StandardListItem title="{dashboard>label}" info="{dashboard>count}" infoState="Information"/>
+                            </List>
+                        </content>
+                    </Panel>
+                    <Panel headerText="Audit activity trend" class="iamDashboardPanel">
+                        <content>
+                            <mc:ColumnMicroChart width="100%" height="7rem" size="Responsive" showBottomLabels="true" allowColumnLabels="true" columns="{dashboard>/auditTrend}">
+                                <mc:columns>
+                                    <mc:ColumnMicroChartData value="{dashboard>count}" label="{dashboard>day}" color="{dashboard>color}"/>
+                                </mc:columns>
+                            </mc:ColumnMicroChart>
+                            <Text text="Events in the last seven available days" class="sapUiTinyMarginTop"/>
+                        </content>
+                    </Panel>
+                </l:Grid>
+                <l:Grid defaultSpan="XL8 L8 M12 S12" hSpacing="1" vSpacing="1">
+                    <Panel headerText="Requests requiring attention" class="iamDashboardPanel">
+                        <layoutData><l:GridData span="XL8 L8 M12 S12"/></layoutData>
+                        <content>
+                            <Table items="{dashboard>/attentionRequests}" growing="true" growingThreshold="10" noDataText="No pending requests">
+                                <columns>
+                                    <Column><Text text="Request"/></Column>
+                                    <Column><Text text="User"/></Column>
+                                    <Column><Text text="Status"/></Column>
+                                    <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Last changed"/></Column>
+                                </columns>
+                                <items><ColumnListItem type="Navigation" press=".onRequestPress">
+                                    <cells>
+                                        <Link text="{dashboard>requestId}" press=".onRequestLinkPress"
+                                            tooltip="Open request detail"/>
+                                        <ObjectIdentifier title="{dashboard>targetUser}" text="{dashboard>fullName}"/>
+                                        <ObjectStatus text="{dashboard>statusText}" state="{dashboard>state}"/>
+                                        <Text text="{dashboard>changedAt}"/>
+                                    </cells>
+                                </ColumnListItem></items>
+                            </Table>
+                        </content>
+                    </Panel>
+                    <Panel headerText="Recent activity" class="iamDashboardPanel">
+                        <layoutData><l:GridData span="XL4 L4 M12 S12"/></layoutData>
+                        <content>
+                            <List items="{dashboard>/recentActivity}" noDataText="No audit activity">
+                                <StandardListItem title="{dashboard>actionLabel}" description="{dashboard>targetUser} · {dashboard>performedBy}" info="{dashboard>changedAt}"/>
+                            </List>
+                        </content>
+                    </Panel>
+                </l:Grid>
+            </VBox>
         </f:content>
     </f:DynamicPage>
 </mvc:View>
